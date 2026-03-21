@@ -1,0 +1,66 @@
+// Unit tests for Lattish — run via: npm test
+// Requires DOM (jsdom). Tests h(), Fragment, useState, useRef, createRoot.
+
+import { h, Fragment, useState, useRef, createRoot } from "../src/Lattish.tish"
+
+fn assert(cond, msg) {
+  if (!cond) {
+    throw "Assertion failed: " + msg
+  }
+}
+
+fn testH() {
+  let el = h("div", { class: "foo" }, ["hello"])
+  assert(el.tagName === "DIV", "h(div) tagName")
+  assert(el.className === "foo", "h(div) class")
+  assert(el.textContent === "hello", "h(div) textContent")
+  let input = h("input", { type: "text", value: "x" }, [])
+  assert(input.value === "x", "h(input) value")
+  let disabled = h("button", { disabled: true }, [])
+  assert(disabled.disabled === true, "h(button) disabled")
+}
+
+fn testFragment() {
+  let frag = h(Fragment, null, [
+    h("span", null, ["a"]),
+    "b",
+    h("span", null, ["c"])
+  ])
+  assert(frag.nodeType === 11, "Fragment is DocumentFragment")
+  assert(frag.childNodes.length === 3, "Fragment has 3 children")
+}
+
+fn testUseState() {
+  let [v, setV] = useState(42)
+  assert(v === 42, "useState initial value")
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  root.render(() => {
+    let [x, setX] = useState(0)
+    return h("div", null, [String(x)])
+  })
+  assert(ctx.container.textContent === "0", "useState initial render")
+}
+
+fn testUseRef() {
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  let refVal = { current: null }
+  root.render(() => {
+    let ref = useRef(null)
+    refVal.current = ref
+    return h("div", { ref: ref }, ["x"])
+  })
+  assert(refVal.current.current !== null, "useRef bound to element")
+  assert(refVal.current.current.tagName === "DIV", "useRef element is div")
+}
+
+fn main() {
+  testH()
+  testFragment()
+  testUseState()
+  testUseRef()
+  console.log("Lattish tests passed")
+}
+
+main()
