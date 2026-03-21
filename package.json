@@ -1,0 +1,15 @@
+{
+  "name": "lattish",
+  "version": "0.1.0",
+  "description": "Lattish runtime — hooks + DOM for Tish JSX",
+  "tish": { "module": "./src/Lattish.tish" },
+  "main": "./src/Lattish.tish",
+  "files": ["src/", "README.md"],
+  "scripts": {
+    "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@tishlang/tish": "^1.0.0"
+  }
+}
