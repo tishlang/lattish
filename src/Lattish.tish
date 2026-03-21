@@ -2,16 +2,18 @@
 // With `tish compile --target js --jsx vdom`, the compiler injects a prelude that sets
 // window.__LATTISH_JSX_VDOM and __lattishVdomPatch; createRoot then reconciles vnodes.
 
+// --- DOM ---
+
 export let Fragment = Symbol("Lattish.Fragment")
 
-fn __lattishAppend(parent, c) {
+fn appendChildOrText(parent, c) {
   if (c === null || c === undefined) {
     return
   }
   if (Array.isArray(c)) {
     let i = 0
     while (i < c.length) {
-      __lattishAppend(parent, c[i])
+      appendChildOrText(parent, c[i])
       i = i + 1
     }
     return
@@ -23,6 +25,37 @@ fn __lattishAppend(parent, c) {
   }
 }
 
+fn applyProp(el, tag, k, v) {
+  if (k === "ref") {
+    return
+  }
+  if (k === "disabled") {
+    el.disabled = !!v
+    return
+  }
+  if (v === true) {
+    el.setAttribute(k, k)
+    return
+  }
+  if (v === false || v === null || v === undefined) {
+    return
+  }
+  if (k === "class" || k === "className") {
+    el.className = v
+    return
+  }
+  if (k.length >= 3 && k[0] === "o" && k[1] === "n" && typeof v === "function") {
+    let eventType = k.slice(2).toLowerCase()
+    el.addEventListener(eventType, v)
+    return
+  }
+  if (k === "value" && (tag === "input" || tag === "textarea")) {
+    el.value = v
+    return
+  }
+  el.setAttribute(k, String(v))
+}
+
 export fn h(tag, props, children) {
   if (children === undefined || children === null) {
     children = []
@@ -31,7 +64,7 @@ export fn h(tag, props, children) {
     let f = document.createDocumentFragment()
     let i = 0
     while (i < children.length) {
-      __lattishAppend(f, children[i])
+      appendChildOrText(f, children[i])
       i = i + 1
     }
     return f
@@ -47,39 +80,14 @@ export fn h(tag, props, children) {
       if (k === "ref") {
         refVal = v
       } else {
-        if (k === "disabled") {
-          el.disabled = !!v
-        } else {
-        if (v === true) {
-          el.setAttribute(k, k)
-        } else {
-          if (v !== false && v !== null && v !== undefined) {
-            if (k === "class" || k === "className") {
-              el.className = v
-            } else {
-              if (k.length >= 3 && k[0] === "o" && k[1] === "n" && typeof v === "function") {
-                let eventType = k.slice(2).toLowerCase()
-                el.addEventListener(eventType, v)
-              } else {
-                if (k === "value" && (tag === "input" || tag === "textarea")) {
-                  el.value = v
-                } else {
-                  if (k !== "ref") {
-                    el.setAttribute(k, String(v))
-                  }
-                }
-              }
-            }
-          }
-        }
-        }
+        applyProp(el, tag, k, v)
       }
       ki = ki + 1
     }
   }
   let ci = 0
   while (ci < children.length) {
-    __lattishAppend(el, children[ci])
+    appendChildOrText(el, children[ci])
     ci = ci + 1
   }
   if (refVal !== null && refVal !== undefined && typeof refVal === "object") {
@@ -92,23 +100,25 @@ export fn text(s) {
   return s
 }
 
-let __state = []
-let __cursor = 0
-let __container = null
-let __App = null
-let __rootVnode = null
+// --- Reconciler ---
 
-let __memoSlots = []
-let __refSlots = []
-let __layoutEffectSlots = []
-let __effectSlots = []
+let stateSlots = []
+let hookCursor = 0
+let rootContainer = null
+let rootComponent = null
+let rootVnode = null
 
-let __flushScheduled = false
-let __batchDepth = 0
-let __dirtyFromBatch = false
-let __effectsMicrotaskScheduled = false
+let memoSlots = []
+let refSlots = []
+let layoutEffectSlots = []
+let effectSlots = []
 
-fn __depsChanged(prev, next) {
+let flushScheduled = false
+let batchDepth = 0
+let dirtyFromBatch = false
+let effectsMicrotaskScheduled = false
+
+fn depsChanged(prev, next) {
   if (prev === null) {
     return true
   }
@@ -128,10 +138,10 @@ fn __depsChanged(prev, next) {
   return false
 }
 
-fn __runLayoutEffects() {
+fn runLayoutEffects() {
   let i = 0
-  while (i < __layoutEffectSlots.length) {
-    let s = __layoutEffectSlots[i]
+  while (i < layoutEffectSlots.length) {
+    let s = layoutEffectSlots[i]
     if (s && s.pending) {
       s.pending = false
       if (s.cleanup) {
@@ -147,16 +157,16 @@ fn __runLayoutEffects() {
   }
 }
 
-fn __scheduleEffectsFlush() {
-  if (__effectsMicrotaskScheduled) {
+fn scheduleEffectsFlush() {
+  if (effectsMicrotaskScheduled) {
     return
   }
-  __effectsMicrotaskScheduled = true
+  effectsMicrotaskScheduled = true
   queueMicrotask(() => {
-    __effectsMicrotaskScheduled = false
+    effectsMicrotaskScheduled = false
     let i = 0
-    while (i < __effectSlots.length) {
-      let s = __effectSlots[i]
+    while (i < effectSlots.length) {
+      let s = effectSlots[i]
       if (s && s.pending) {
         s.pending = false
         if (s.cleanup) {
@@ -173,116 +183,108 @@ fn __scheduleEffectsFlush() {
   })
 }
 
-/// Runs synchronously after DOM is updated (before paint in typical browsers).
-export fn useLayoutEffect(effect, deps) {
-  let i = __cursor
-  __cursor = __cursor + 1
-  while (i >= __layoutEffectSlots.length) {
-    __layoutEffectSlots.push(null)
+fn effectSlot(slots, effect, deps, scheduleAsync) {
+  let i = hookCursor
+  hookCursor = hookCursor + 1
+  while (i >= slots.length) {
+    slots.push(null)
   }
-  let slot = __layoutEffectSlots[i]
+  let slot = slots[i]
   if (slot === null) {
     slot = { deps: null, effect: null, cleanup: null, pending: false }
-    __layoutEffectSlots[i] = slot
+    slots[i] = slot
   }
-  if (__depsChanged(slot.deps, deps)) {
+  if (depsChanged(slot.deps, deps)) {
     slot.deps = deps
     slot.effect = effect
     slot.pending = true
+    if (scheduleAsync) {
+      scheduleEffectsFlush()
+    }
   }
+}
+
+/// Runs synchronously after DOM is updated (before paint in typical browsers).
+export fn useLayoutEffect(effect, deps) {
+  effectSlot(layoutEffectSlots, effect, deps, false)
 }
 
 /// Runs after paint (microtask after flush).
 export fn useEffect(effect, deps) {
-  let i = __cursor
-  __cursor = __cursor + 1
-  while (i >= __effectSlots.length) {
-    __effectSlots.push(null)
-  }
-  let slot = __effectSlots[i]
-  if (slot === null) {
-    slot = { deps: null, effect: null, cleanup: null, pending: false }
-    __effectSlots[i] = slot
-  }
-  if (__depsChanged(slot.deps, deps)) {
-    slot.deps = deps
-    slot.effect = effect
-    slot.pending = true
-    __scheduleEffectsFlush()
-  }
+  effectSlot(effectSlots, effect, deps, true)
 }
 
-fn __usingVdom() {
+fn usingVdom() {
   return typeof window !== "undefined" && window.__LATTISH_JSX_VDOM && window.__lattishVdomPatch
 }
 
-fn __flushRender() {
-  __cursor = 0
-  if (__container && __App) {
-    if (__usingVdom()) {
-      let newTree = __App()
-      window.__lattishVdomPatch(__container, __rootVnode, newTree)
-      __rootVnode = newTree
+fn flushRender() {
+  hookCursor = 0
+  if (rootContainer && rootComponent) {
+    if (usingVdom()) {
+      let newTree = rootComponent()
+      window.__lattishVdomPatch(rootContainer, rootVnode, newTree)
+      rootVnode = newTree
     } else {
-      let el = __App()
-      __container.replaceChildren(el)
-      __rootVnode = null
+      let el = rootComponent()
+      rootContainer.replaceChildren(el)
+      rootVnode = null
     }
-    __runLayoutEffects()
-    __scheduleEffectsFlush()
+    runLayoutEffects()
+    scheduleEffectsFlush()
   }
 }
 
-fn __scheduleFlush() {
-  if (__batchDepth > 0) {
-    __dirtyFromBatch = true
+fn scheduleFlush() {
+  if (batchDepth > 0) {
+    dirtyFromBatch = true
     return
   }
-  if (__flushScheduled) {
+  if (flushScheduled) {
     return
   }
-  __flushScheduled = true
+  flushScheduled = true
   queueMicrotask(() => {
-    __flushScheduled = false
-    __flushRender()
+    flushScheduled = false
+    flushRender()
   })
 }
 
 export fn unstable_batchedUpdates(run) {
-  __batchDepth = __batchDepth + 1
+  batchDepth = batchDepth + 1
   run()
-  __batchDepth = __batchDepth - 1
-  if (__batchDepth === 0 && __dirtyFromBatch) {
-    __dirtyFromBatch = false
-    __flushScheduled = false
-    __flushRender()
+  batchDepth = batchDepth - 1
+  if (batchDepth === 0 && dirtyFromBatch) {
+    dirtyFromBatch = false
+    flushScheduled = false
+    flushRender()
   }
 }
 
 export fn useState(init) {
-  let i = __cursor
-  __cursor = __cursor + 1
-  if (i >= __state.length) {
-    __state.push(init)
+  let i = hookCursor
+  hookCursor = hookCursor + 1
+  if (i >= stateSlots.length) {
+    stateSlots.push(init)
   }
   fn setState(v) {
     if (typeof v === "function") {
-      __state[i] = v(__state[i])
+      stateSlots[i] = v(stateSlots[i])
     } else {
-      __state[i] = v
+      stateSlots[i] = v
     }
-    __scheduleFlush()
+    scheduleFlush()
   }
-  return [__state[i], setState]
+  return [stateSlots[i], setState]
 }
 
 export fn useMemo(deps, factory) {
-  let i = __cursor
-  __cursor = __cursor + 1
-  while (i >= __memoSlots.length) {
-    __memoSlots.push(null)
+  let i = hookCursor
+  hookCursor = hookCursor + 1
+  while (i >= memoSlots.length) {
+    memoSlots.push(null)
   }
-  let slot = __memoSlots[i]
+  let slot = memoSlots[i]
   let stale = true
   if (slot) {
     stale = false
@@ -300,48 +302,48 @@ export fn useMemo(deps, factory) {
     }
   }
   if (stale) {
-    __memoSlots[i] = { deps: deps, value: factory() }
+    memoSlots[i] = { deps: deps, value: factory() }
   }
-  return __memoSlots[i].value
+  return memoSlots[i].value
 }
 
 export fn useRef(initial) {
-  let i = __cursor
-  __cursor = __cursor + 1
-  while (i >= __refSlots.length) {
-    __refSlots.push(null)
+  let i = hookCursor
+  hookCursor = hookCursor + 1
+  while (i >= refSlots.length) {
+    refSlots.push(null)
   }
-  if (__refSlots[i] === null) {
-    __refSlots[i] = { current: initial }
+  if (refSlots[i] === null) {
+    refSlots[i] = { current: initial }
   }
-  return __refSlots[i]
+  return refSlots[i]
 }
 
 export fn createRoot(container) {
   fn render(App) {
-    __container = container
-    __App = App
-    __state = []
-    __memoSlots = []
-    __refSlots = []
-    __layoutEffectSlots = []
-    __effectSlots = []
-    __cursor = 0
-    __flushScheduled = false
-    __batchDepth = 0
-    __dirtyFromBatch = false
-    __effectsMicrotaskScheduled = false
-    __rootVnode = null
-    if (__usingVdom()) {
-      __rootVnode = App()
-      window.__lattishVdomPatch(container, null, __rootVnode)
+    rootContainer = container
+    rootComponent = App
+    stateSlots = []
+    memoSlots = []
+    refSlots = []
+    layoutEffectSlots = []
+    effectSlots = []
+    hookCursor = 0
+    flushScheduled = false
+    batchDepth = 0
+    dirtyFromBatch = false
+    effectsMicrotaskScheduled = false
+    rootVnode = null
+    if (usingVdom()) {
+      rootVnode = App()
+      window.__lattishVdomPatch(container, null, rootVnode)
     } else {
       let el = App()
       container.replaceChildren(el)
     }
-    __cursor = 0
-    __runLayoutEffects()
-    __scheduleEffectsFlush()
+    hookCursor = 0
+    runLayoutEffects()
+    scheduleEffectsFlush()
   }
   return { render: render }
 }
