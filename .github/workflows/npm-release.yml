@@ -12,6 +12,8 @@ jobs:
     name: Publish to npm
     if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to update release body via API
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
