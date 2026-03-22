@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattish Examples</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 1rem 2rem 2rem;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #27272a;
+    }
+    .header h1 { font-size: 1rem; font-weight: 600; margin: 0; }
+    .header select {
+      padding: 0.375rem 0.75rem;
+      border: 1px solid #3f3f46;
+      border-radius: 0.25rem;
+      background: #18181b;
+      color: #e4e4e7;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .header select:hover { border-color: #52525b; }
+    .header select:focus { outline: none; border-color: #facc15; }
+    #root {
+      padding: 1rem;
+      border: 1px solid #27272a;
+      border-radius: 0.5rem;
+      background: #18181b;
+      min-height: 200px;
+    }
+    #root p, #root li { margin: 0.5rem 0; }
+    #root button {
+      padding: 0.5rem 1rem;
+      margin-right: 0.5rem;
+      margin-top: 0.5rem;
+      background: #facc15;
+      color: #0f1117;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    #root button:hover { background: #fde047; }
+    #root input {
+      padding: 0.5rem;
+      border: 1px solid #3f3f46;
+      border-radius: 0.25rem;
+      background: #27272a;
+      color: #e4e4e7;
+      margin-left: 0.5rem;
+    }
+    #root ul { padding-left: 1.5rem; }
+    #root pre {
+      margin: 0;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.75rem;
+      background: #27272a;
+      border-radius: 0.25rem;
+    }
+    .field label { display: inline-block; min-width: 4rem; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Lattish Examples</h1>
+    <select id="picker">
+      <option value="01-counter">01 Counter</option>
+      <option value="02-list">02 List</option>
+      <option value="03-greeting">03 Greeting</option>
+      <option value="04-ref">04 useRef</option>
+      <option value="05-memo">05 useMemo</option>
+      <option value="06-effects">06 useEffect</option>
+      <option value="07-batched">07 Batched</option>
+      <option value="08-fragment">08 Fragment</option>
+    </select>
+  </div>
+  <div id="root"></div>
+  <script type="module">
+    const examples = ['01-counter', '02-list', '03-greeting', '04-ref', '05-memo', '06-effects', '07-batched', '08-fragment'];
+    const params = new URLSearchParams(location.search);
+    let current = params.get('example') || '01-counter';
+    if (!examples.includes(current)) current = '01-counter';
+
+    document.getElementById('picker').value = current;
+    document.getElementById('picker').addEventListener('change', (e) => {
+      location.search = '?example=' + e.target.value;
+    });
+
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = './dist/' + current + '.js';
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>

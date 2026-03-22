@@ -1,0 +1,15 @@
+// Counter — useState, createRoot
+// Docs: https://lattish.dev/docs/getting-started/usage
+// Compile: tish compile --target js examples/01-counter.tish -o dist/01-counter
+
+import { useState, createRoot } from 'lattish'
+
+fn App() {
+  let [count, setCount] = useState(0)
+  return <div>
+    <p>{"Count: " + String(count)}</p>
+    <button onclick={() => setCount(count + 1)}>{"Increment"}</button>
+  </div>
+}
+
+createRoot(document.getElementById("root")).render(App)

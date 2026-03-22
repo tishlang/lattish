@@ -1,0 +1,14 @@
+// List — useState with array, mapping over items
+// Docs: https://lattish.dev/docs/getting-started/usage
+// Compile: tish compile --target js examples/02-list.tish -o dist/02-list
+
+import { useState, createRoot } from 'lattish'
+
+fn TodoList() {
+  let [items, setItems] = useState(["Learn Lattish", "Build app", "Ship it"])
+  return <ul>
+    {items.map((item, i) => <li key={String(i)}>{item}</li>)}
+  </ul>
+}
+
+createRoot(document.getElementById("root")).render(TodoList)

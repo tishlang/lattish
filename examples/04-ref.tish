@@ -1,0 +1,20 @@
+// useRef — DOM ref for input focus
+// Docs: https://lattish.dev/docs/api/hooks
+// Compile: tish compile --target js examples/04-ref.tish -o dist/04-ref
+
+import { useRef, useEffect, createRoot } from 'lattish'
+
+fn App() {
+  let inputRef = useRef(null)
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [])
+  return <div>
+    <label>{"Name: "}</label>
+    <input ref={inputRef} placeholder="Type here" type="text" />
+  </div>
+}
+
+createRoot(document.getElementById("root")).render(App)

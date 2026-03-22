@@ -1,0 +1,23 @@
+// Automatic batching (React 18 style)
+// Docs: https://lattish.dev/docs/api/hooks
+// Event handlers batch updates by default: 3 setState calls = 1 re-render
+// Compile: tish compile --target js examples/07-batched.tish -o dist/07-batched
+
+import { useState, createRoot } from 'lattish'
+
+fn App() {
+  let [a, setA] = useState(0)
+  let [b, setB] = useState(0)
+  let [c, setC] = useState(0)
+  fn handleBatch() {
+    setA(1)
+    setB(2)
+    setC(3)
+  }
+  return <div>
+    <p>{"A: " + String(a) + ", B: " + String(b) + ", C: " + String(c)}</p>
+    <button onclick={handleBatch}>{"Batch update"}</button>
+  </div>
+}
+
+createRoot(document.getElementById("root")).render(App)

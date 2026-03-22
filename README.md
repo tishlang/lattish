@@ -30,7 +30,7 @@ Requires the [Tish](https://github.com/tishlang/tish) compiler with `--jsx latti
 
 - `h`, `Fragment`, `text` — DOM runtime for compiled JSX
 - `createRoot` — mount and re-render
-- `useState`, `useRef`, `useMemo`, `useEffect`, `useLayoutEffect`, `unstable_batchedUpdates` — hooks
+- `useState`, `useRef`, `useMemo`, `useEffect`, `useLayoutEffect` — hooks (event handlers batch updates automatically, React 18 style; `unstable_batchedUpdates` for edge cases)
 
 ## Links
 

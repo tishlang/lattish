@@ -1,0 +1,17 @@
+// useMemo — memoized computed value (matches React: factory, deps)
+// Docs: https://lattish.dev/docs/api/hooks
+// Compile: tish compile --target js examples/05-memo.tish -o dist/05-memo
+
+import { useState, useMemo, createRoot } from 'lattish'
+
+fn App() {
+  let [count, setCount] = useState(5)
+  let doubled = useMemo(() => count * 2, [count])
+  return <div>
+    <p>{"Count: " + String(count)}</p>
+    <p>{"Doubled: " + String(doubled)}</p>
+    <button onclick={() => setCount(count + 1)}>{"Increment"}</button>
+  </div>
+}
+
+createRoot(document.getElementById("root")).render(App)

@@ -12,7 +12,7 @@
   },
   "tish": { "module": "./src/Lattish.tish" },
   "main": "./src/Lattish.tish",
-  "files": ["src/", "README.md"],
+  "files": ["src/", "README.md", "examples/"],
   "scripts": {
     "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js",
     "test": "node test/run-tests.mjs",
