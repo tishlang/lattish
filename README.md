@@ -6,6 +6,8 @@ Lattish runtime for Tish JSX — hooks + DOM helpers for compiled Tish apps.
 
 ```bash
 npm install lattish
+# or
+npm install @tishlang/lattish
 ```
 
 ## Usage

@@ -23,16 +23,24 @@ jobs:
           ref: refs/tags/${{ github.event.release.tag_name }}
           fetch-depth: 0
 
-      - name: Download npm package tarball from release
+      - name: Download npm package tarballs from release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ASSET_URL=$(echo '${{ toJSON(github.event.release.assets) }}' | jq -r '.[] | select(.name == "lattish-npm-package.tgz") | .url')
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+          ASSETS='${{ toJSON(github.event.release.assets) }}'
+          LATTISH_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name == "lattish-npm-package.tgz") | .url')
+          TISHLANG_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name == "tishlang-lattish-npm-package.tgz") | .url')
+          if [ -z "$LATTISH_URL" ] || [ "$LATTISH_URL" = "null" ]; then
             echo "Release has no asset lattish-npm-package.tgz"
             exit 1
           fi
-          curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$ASSET_URL" -o lattish-npm-package.tgz
+          curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$LATTISH_URL" -o lattish-npm-package.tgz
+          if [ -n "$TISHLANG_URL" ] && [ "$TISHLANG_URL" != "null" ]; then
+            curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$TISHLANG_URL" -o tishlang-lattish-npm-package.tgz
+            echo "HAS_TISHLANG=true" >> $GITHUB_ENV
+          else
+            echo "HAS_TISHLANG=false" >> $GITHUB_ENV
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -43,13 +51,18 @@ jobs:
       - name: Publish lattish to npm
         run: npm publish lattish-npm-package.tgz --access public
 
-      - name: Update release description with npm URL
+      - name: Publish @tishlang/lattish to npm
+        if: env.HAS_TISHLANG == 'true'
+        run: npm publish tishlang-lattish-npm-package.tgz --access public
+
+      - name: Update release description with npm URLs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
           VERSION="${TAG#v}"
           NPM_URL="https://www.npmjs.com/package/lattish/v/${VERSION}"
+          TISHLANG_NPM_URL="https://www.npmjs.com/package/@tishlang/lattish/v/${VERSION}"
           RELEASE_ID="${{ github.event.release.id }}"
           REPO="${{ github.repository }}"
           # Fetch current release body from API (more reliable than event for large bodies)
@@ -58,7 +71,7 @@ jobs:
           NEW_BODY="${CURRENT_BODY}
 
           ---
-          Published to npm: ${NPM_URL}"
+          Published to npm: ${NPM_URL} | ${TISHLANG_NPM_URL}"
           curl -s -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
