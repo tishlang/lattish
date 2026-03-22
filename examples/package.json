@@ -12,6 +12,6 @@
     "build:08": "tish compile --target js 08-fragment.tish -o dist/08-fragment"
   },
   "dependencies": {
-    "lattish": "file:.."
+    "lattish": "^1.0.5"
   }
 }
