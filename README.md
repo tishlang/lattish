@@ -12,7 +12,7 @@ npm install @tishlang/lattish
 
 ## Usage
 
-```tish
+```javascript
 import { useState, createRoot, h, Fragment } from 'lattish'
 
 fn App() {
