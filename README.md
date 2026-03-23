@@ -34,6 +34,11 @@ Requires the [Tish](https://github.com/tishlang/tish) compiler with `--jsx latti
 - `createRoot` — mount and re-render
 - `useState`, `useRef`, `useMemo`, `useEffect`, `useLayoutEffect` — hooks (event handlers batch updates automatically, React 18 style; `unstable_batchedUpdates` for edge cases)
 
+## Examples
+
+- **Tish** — `examples/features/` (requires tish compiler)
+- **JS/TS** — `examples/js-workflow/` (no tish; imports compiled lattish)
+
 ## Links
 
 - [Tish language](https://tishlang.com)

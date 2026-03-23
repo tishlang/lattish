@@ -13,16 +13,27 @@
   "tish": {
     "module": "./src/Lattish.tish"
   },
-  "main": "./src/Lattish.tish",
+  "main": "./dist/Lattish.js",
+  "module": "./dist/Lattish.js",
+  "exports": {
+    ".": {
+      "tish": "./src/Lattish.tish",
+      "import": "./dist/Lattish.js",
+      "require": "./dist/Lattish.js",
+      "default": "./dist/Lattish.js"
+    }
+  },
   "files": [
     "src/",
+    "dist/",
     "README.md",
     "examples/"
   ],
   "scripts": {
-    "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js",
+    "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js && node -e \"require('fs').appendFileSync('dist/Lattish.js', '\\nexport { Fragment, h, text, useLayoutEffect, useEffect, unstable_batchedUpdates, useState, useMemo, useRef, createRoot };\\n')\"",
     "tishversion": "tish -V",
     "test": "node test/run-tests.mjs",
+    "prepack": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {

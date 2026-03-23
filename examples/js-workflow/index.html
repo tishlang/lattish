@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattish from JS</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    #root {
+      padding: 1.5rem;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      background: #1e293b;
+      max-width: 24rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-top: 0.5rem;
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover {
+      background: #7dd3fc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Lattish from plain JS</h1>
+  <p>No Tish compiler — imports from compiled <code>lattish</code>.</p>
+  <div id="root"></div>
+  <script type="module" src="/main.ts"></script>
+</body>
+</html>
