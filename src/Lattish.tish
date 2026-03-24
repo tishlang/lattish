@@ -1,31 +1,48 @@
-// Lattish: Lattish runtime for compiled JSX. Publish to npm; consumed by tish and tish-playground.
-// With `tish compile --target js --jsx vdom`, the compiler injects a prelude that sets
-// window.__LATTISH_JSX_VDOM and __lattishVdomPatch; createRoot then reconciles vnodes.
-
-// --- DOM ---
+// Lattish: hooks + `h` / `Fragment`. JSX lowers to `h(...)`; `h` builds vnodes, reconciler patches the root (no globals).
 
 export let Fragment = Symbol("Lattish.Fragment")
 
-fn appendChildOrText(parent, c) {
-  if (c === null || c === undefined) {
+// --- VDOM: flatten / mount / patch (module-local; not on window) ---
+
+fn flattenInto(out, c) {
+  if (c == null) {
     return
   }
   if (Array.isArray(c)) {
     let i = 0
     while (i < c.length) {
-      appendChildOrText(parent, c[i])
+      flattenInto(out, c[i])
       i = i + 1
     }
     return
   }
-  if (typeof c === "string") {
-    parent.appendChild(document.createTextNode(c))
-  } else {
-    parent.appendChild(c)
+  if (typeof c === "object" && c && c.tag === Fragment) {
+    let inner = c.children
+    if (Array.isArray(inner)) {
+      let j = 0
+      while (j < inner.length) {
+        flattenInto(out, inner[j])
+        j = j + 1
+      }
+    }
+    return
   }
+  out.push(c)
 }
 
-fn applyProp(el, tag, k, v) {
+fn flattenChildren(ch) {
+  let out = []
+  if (Array.isArray(ch)) {
+    let i = 0
+    while (i < ch.length) {
+      flattenInto(out, ch[i])
+      i = i + 1
+    }
+  }
+  return out
+}
+
+fn applyMountedProp(el, tag, k, v) {
   if (k === "ref") {
     return
   }
@@ -45,21 +62,234 @@ fn applyProp(el, tag, k, v) {
     return
   }
   if (k.length >= 3 && k[0] === "o" && k[1] === "n" && typeof v === "function") {
-    let eventType = k.slice(2).toLowerCase()
-    // React 18: batch updates by default for event handlers
-    el.addEventListener(eventType, (e) => { unstable_batchedUpdates(() => v(e)) })
+    // Property handler only — must match patchVnodeEl so we do not stack addEventListener + onclick (double fire).
+    el[k.toLowerCase()] = (e) => { runBatched(() => v(e)) }
     return
   }
-  if (k === "value" && (tag === "input" || tag === "textarea")) {
+  if (k === "value" && (tag === "input" || tag === "textarea" || tag === "select")) {
     el.value = v
     return
   }
   el.setAttribute(k, String(v))
 }
 
+fn mountVnode(v) {
+  if (typeof v === "string") {
+    return document.createTextNode(v)
+  }
+  if (v && v.tag === Fragment) {
+    let f = document.createDocumentFragment()
+    let ch = flattenChildren(v.children)
+    let i = 0
+    while (i < ch.length) {
+      f.appendChild(mountVnode(ch[i]))
+      i = i + 1
+    }
+    return f
+  }
+  let el = document.createElement(v.tag)
+  let p = v.props || {}
+  let keys = Object.keys(p)
+  let ki = 0
+  let refVal = null
+  while (ki < keys.length) {
+    let k = keys[ki]
+    let val = p[k]
+    if (k === "ref") {
+      refVal = val
+    } else {
+      applyMountedProp(el, v.tag, k, val)
+    }
+    ki = ki + 1
+  }
+  let ch2 = flattenChildren(v.children)
+  let ci = 0
+  while (ci < ch2.length) {
+    el.appendChild(mountVnode(ch2[ci]))
+    ci = ci + 1
+  }
+  if (refVal !== null && refVal !== undefined && typeof refVal === "object") {
+    refVal.current = el
+  }
+  v._el = el
+  return el
+}
+
+fn patchVnodeEl(el, ov, nv) {
+  if (!el || !ov || !nv) {
+    return false
+  }
+  if (typeof nv === "string") {
+    if (el.nodeType === 3) {
+      el.textContent = nv
+    }
+    return true
+  }
+  if (ov.tag !== nv.tag) {
+    return false
+  }
+  nv._el = el
+  let p = nv.props || {}
+  let op = ov.props || {}
+  let keys = Object.keys(p)
+  let ki = 0
+  while (ki < keys.length) {
+    let k = keys[ki]
+    if (p[k] !== op[k]) {
+      let val = p[k]
+      if (k === "class" || k === "className") {
+        el.className = val || ""
+      } else {
+        if (k.length >= 3 && k[0] === "o" && k[1] === "n") {
+          if (typeof val === "function") {
+            el[k.toLowerCase()] = (e) => { runBatched(() => val(e)) }
+          } else {
+            el[k.toLowerCase()] = null
+          }
+        } else {
+          if (k === "value" && (nv.tag === "input" || nv.tag === "textarea" || nv.tag === "select")) {
+            if (el !== document.activeElement) {
+              el.value = val
+            }
+          } else {
+            el.setAttribute(k, String(val))
+          }
+        }
+      }
+    }
+    ki = ki + 1
+  }
+  let ocx = flattenChildren(ov.children)
+  let ncx = flattenChildren(nv.children)
+  let fullCh = ocx.length !== ncx.length
+  if (!fullCh) {
+    let j = 0
+    while (j < ncx.length) {
+      let o = ocx[j]
+      let n = ncx[j]
+      if (typeof n === "string") {
+        if (typeof o !== "string") {
+          fullCh = true
+        }
+      } else {
+        if (typeof o === "string") {
+          fullCh = true
+        } else {
+          if (!o || o.tag !== n.tag) {
+            fullCh = true
+          }
+        }
+      }
+      if (fullCh) {
+        break
+      }
+      j = j + 1
+    }
+  }
+  if (fullCh) {
+    let nodes = []
+    let j = 0
+    while (j < ncx.length) {
+      nodes.push(mountVnode(ncx[j]))
+      j = j + 1
+    }
+    el.replaceChildren(...nodes)
+    return true
+  }
+  let i = 0
+  while (i < ncx.length) {
+    let o = ocx[i]
+    let n = ncx[i]
+    let childEl = el.childNodes[i]
+    if (n == null) {
+      if (childEl) {
+        el.removeChild(childEl)
+      }
+      i = i + 1
+      continue
+    }
+    if (o == null) {
+      el.appendChild(mountVnode(n))
+      i = i + 1
+      continue
+    }
+    if (typeof n === "string") {
+      if (childEl && childEl.nodeType === 3) {
+        childEl.textContent = n
+      } else {
+        let m = mountVnode(n)
+        if (childEl) {
+          el.replaceChild(m, childEl)
+        } else {
+          el.appendChild(m)
+        }
+      }
+      i = i + 1
+      continue
+    }
+    if (typeof o === "string" || o.tag !== n.tag) {
+      let m = mountVnode(n)
+      if (childEl) {
+        el.replaceChild(m, childEl)
+      } else {
+        el.appendChild(m)
+      }
+      i = i + 1
+      continue
+    }
+    if (!childEl || !patchVnodeEl(childEl, o, n)) {
+      let m = mountVnode(n)
+      if (childEl) {
+        el.replaceChild(m, childEl)
+      } else {
+        el.appendChild(m)
+      }
+    }
+    i = i + 1
+  }
+  return true
+}
+
+fn patchRoot(container, oldTree, newTree) {
+  try {
+    if (oldTree == null) {
+      container.replaceChildren(mountVnode(newTree))
+      return
+    }
+    let el = container.firstChild
+    if (!el) {
+      container.appendChild(mountVnode(newTree))
+      return
+    }
+    if (typeof newTree === "string" || oldTree.tag !== newTree.tag) {
+      container.replaceChildren(mountVnode(newTree))
+      return
+    }
+    if (!patchVnodeEl(el, oldTree, newTree)) {
+      container.replaceChildren(mountVnode(newTree))
+    }
+  } catch (err) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn("Lattish patch failed, remount", err)
+    }
+    try {
+      container.replaceChildren(mountVnode(newTree))
+    } catch (e2) {
+      if (typeof console !== "undefined" && console.error) {
+        console.error("Lattish remount failed", e2)
+      }
+    }
+  }
+}
+
+// --- h: vnode factory (compiler JSX) ---
+
 export fn h(tag, props, children) {
   if (children === undefined || children === null) {
     children = []
+  }
+  if (!Array.isArray(children)) {
+    children = [children]
   }
   if (typeof tag === "function") {
     let p = props && props !== null ? props : {}
@@ -77,39 +307,9 @@ export fn h(tag, props, children) {
     return tag(p)
   }
   if (tag === Fragment) {
-    let f = document.createDocumentFragment()
-    let i = 0
-    while (i < children.length) {
-      appendChildOrText(f, children[i])
-      i = i + 1
-    }
-    return f
+    return { tag: Fragment, props: null, children: children, _el: null }
   }
-  let el = document.createElement(tag)
-  let refVal = null
-  if (props && props !== null) {
-    let keys = Object.keys(props)
-    let ki = 0
-    while (ki < keys.length) {
-      let k = keys[ki]
-      let v = props[k]
-      if (k === "ref") {
-        refVal = v
-      } else {
-        applyProp(el, tag, k, v)
-      }
-      ki = ki + 1
-    }
-  }
-  let ci = 0
-  while (ci < children.length) {
-    appendChildOrText(el, children[ci])
-    ci = ci + 1
-  }
-  if (refVal !== null && refVal !== undefined && typeof refVal === "object") {
-    refVal.current = el
-  }
-  return el
+  return { tag: tag, props: props || null, children: children, _el: null }
 }
 
 export fn text(s) {
@@ -220,32 +420,20 @@ fn effectSlot(slots, effect, deps, scheduleAsync) {
   }
 }
 
-/// Runs synchronously after DOM is updated (before paint in typical browsers).
 export fn useLayoutEffect(effect, deps) {
   effectSlot(layoutEffectSlots, effect, deps, false)
 }
 
-/// Runs after paint (microtask after flush).
 export fn useEffect(effect, deps) {
   effectSlot(effectSlots, effect, deps, true)
-}
-
-fn usingVdom() {
-  return typeof window !== "undefined" && window.__LATTISH_JSX_VDOM && window.__lattishVdomPatch
 }
 
 fn flushRender() {
   hookCursor = 0
   if (rootContainer && rootComponent) {
-    if (usingVdom()) {
-      let newTree = rootComponent()
-      window.__lattishVdomPatch(rootContainer, rootVnode, newTree)
-      rootVnode = newTree
-    } else {
-      let el = rootComponent()
-      rootContainer.replaceChildren(el)
-      rootVnode = null
-    }
+    let newTree = rootComponent()
+    patchRoot(rootContainer, rootVnode, newTree)
+    rootVnode = newTree
     runLayoutEffects()
     scheduleEffectsFlush()
   }
@@ -266,9 +454,7 @@ fn scheduleFlush() {
   })
 }
 
-/// Manually batch updates. Usually unnecessary — event handlers batch automatically (React 18 style).
-/// Use when calling setState from third-party callbacks or custom async flows.
-export fn unstable_batchedUpdates(run) {
+fn runBatched(run) {
   batchDepth = batchDepth + 1
   run()
   batchDepth = batchDepth - 1
@@ -328,7 +514,7 @@ export fn useMemo(factory, deps) {
 export fn useRef(initial) {
   let i = hookCursor
   hookCursor = hookCursor + 1
-  while (i >= refSlots.length) {
+  while (i < refSlots.length) {
     refSlots.push(null)
   }
   if (refSlots[i] === null) {
@@ -352,13 +538,9 @@ export fn createRoot(container) {
     dirtyFromBatch = false
     effectsMicrotaskScheduled = false
     rootVnode = null
-    if (usingVdom()) {
-      rootVnode = App()
-      window.__lattishVdomPatch(container, null, rootVnode)
-    } else {
-      let el = App()
-      container.replaceChildren(el)
-    }
+    let tree = App()
+    patchRoot(container, null, tree)
+    rootVnode = tree
     hookCursor = 0
     runLayoutEffects()
     scheduleEffectsFlush()

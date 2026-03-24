@@ -30,7 +30,7 @@
     "examples/"
   ],
   "scripts": {
-    "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js && node -e \"require('fs').appendFileSync('dist/Lattish.js', '\\nexport { Fragment, h, text, useLayoutEffect, useEffect, unstable_batchedUpdates, useState, useMemo, useRef, createRoot };\\n')\"",
+    "build": "tish compile --target js src/Lattish.tish -o dist/Lattish.js && node -e \"require('fs').appendFileSync('dist/Lattish.js', '\\nexport { Fragment, h, text, useLayoutEffect, useEffect, useState, useMemo, useRef, createRoot };\\n')\"",
     "tishversion": "tish -V",
     "test": "node test/run-tests.mjs",
     "prepack": "npm run build",
