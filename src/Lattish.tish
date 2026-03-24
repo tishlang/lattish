@@ -42,12 +42,36 @@ fn flattenChildren(ch) {
   return out
 }
 
+// JSX `style={{ display: "none" }}` — camelCase keys, CSSStyleDeclaration values as strings.
+fn applyStyleObject(el, styleObj) {
+  el.style.cssText = ""
+  if (!styleObj || typeof styleObj !== "object") {
+    return
+  }
+  let keys = Object.keys(styleObj)
+  let ki = 0
+  while (ki < keys.length) {
+    let key = keys[ki]
+    let val = styleObj[key]
+    if (val === null || val === undefined || val === false) {
+      ki = ki + 1
+      continue
+    }
+    el.style[key] = String(val)
+    ki = ki + 1
+  }
+}
+
 fn applyMountedProp(el, tag, k, v) {
   if (k === "ref") {
     return
   }
   if (k === "disabled") {
     el.disabled = !!v
+    return
+  }
+  if (k === "style" && typeof v === "object" && v !== null) {
+    applyStyleObject(el, v)
     return
   }
   if (v === true) {
@@ -147,17 +171,38 @@ fn patchVnodeEl(el, ov, nv) {
             el[k.toLowerCase()] = null
           }
         } else {
-          if (k === "value" && (nv.tag === "input" || nv.tag === "textarea" || nv.tag === "select")) {
-            if (el !== document.activeElement) {
-              el.value = val
+          if (k === "ref") {
+            // Mount assigns ref.current; do not mirror as a DOM attribute.
+          }
+          if (k === "disabled") {
+            el.disabled = !!val
+            if (!val) {
+              el.removeAttribute("disabled")
             }
-          } else {
-            el.setAttribute(k, String(val))
+          }
+          if (k === "style") {
+            if (val && typeof val === "object") {
+              applyStyleObject(el, val)
+            } else {
+              el.style.cssText = ""
+            }
+          }
+          if (k !== "ref" && k !== "disabled" && k !== "style") {
+            if (k === "value" && (nv.tag === "input" || nv.tag === "textarea" || nv.tag === "select")) {
+              if (el !== document.activeElement) {
+                el.value = val
+              }
+            } else {
+              el.setAttribute(k, String(val))
+            }
           }
         }
       }
     }
     ki = ki + 1
+  }
+  if (!("style" in p) && op.style !== undefined && op.style !== null) {
+    el.style.cssText = ""
   }
   let ocx = flattenChildren(ov.children)
   let ncx = flattenChildren(nv.children)

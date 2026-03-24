@@ -69,11 +69,19 @@ fn testUseRef() {
   assert(refVal.current.current.tagName === "DIV", "useRef element is div")
 }
 
+fn testStyleObject() {
+  let c = mountInDiv(() => h("span", { style: { display: "none", marginTop: "2px" } }, ["x"]))
+  let el = c.firstChild
+  assert(el && el.style.display === "none", "style.display none")
+  assert(el.style.marginTop === "2px", "style marginTop")
+}
+
 fn main() {
   testH()
   testFragment()
   testUseState()
   testUseRef()
+  testStyleObject()
   console.log("Lattish tests passed")
 }
 
