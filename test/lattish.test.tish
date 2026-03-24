@@ -1,5 +1,6 @@
 // Unit tests for Lattish — run via: npm test
 // Requires DOM (jsdom). Tests h(), Fragment, useState, useRef, createRoot.
+// h() returns vnodes; DOM is produced by createRoot / patchRoot.
 
 import { h, Fragment, useState, useRef, createRoot } from "../src/Lattish.tish"
 
@@ -9,25 +10,38 @@ fn assert(cond, msg) {
   }
 }
 
+fn mountInDiv(vnodeFn) {
+  let c = document.createElement("div")
+  createRoot(c).render(vnodeFn)
+  return c
+}
+
 fn testH() {
-  let el = h("div", { class: "foo" }, ["hello"])
-  assert(el.tagName === "DIV", "h(div) tagName")
+  let c1 = mountInDiv(() => h("div", { class: "foo" }, ["hello"]))
+  let el = c1.firstChild
+  assert(el && el.tagName === "DIV", "h(div) tagName")
   assert(el.className === "foo", "h(div) class")
   assert(el.textContent === "hello", "h(div) textContent")
-  let input = h("input", { type: "text", value: "x" }, [])
-  assert(input.value === "x", "h(input) value")
-  let disabled = h("button", { disabled: true }, [])
-  assert(disabled.disabled === true, "h(button) disabled")
+
+  let c2 = mountInDiv(() => h("input", { type: "text", value: "x" }, []))
+  let input = c2.firstChild
+  assert(input && input.value === "x", "h(input) value")
+
+  let c3 = mountInDiv(() => h("button", { disabled: true }, []))
+  let disabled = c3.firstChild
+  assert(disabled && disabled.disabled === true, "h(button) disabled")
 }
 
 fn testFragment() {
-  let frag = h(Fragment, null, [
+  let c = mountInDiv(() => h(Fragment, null, [
     h("span", null, ["a"]),
     "b",
     h("span", null, ["c"])
-  ])
-  assert(frag.nodeType === 11, "Fragment is DocumentFragment")
-  assert(frag.childNodes.length === 3, "Fragment has 3 children")
+  ]))
+  assert(c.childNodes.length === 3, "Fragment has 3 children")
+  assert(c.childNodes[0].tagName === "SPAN", "Fragment child 0 span")
+  assert(c.childNodes[1].textContent === "b", "Fragment child 1 text")
+  assert(c.childNodes[2].tagName === "SPAN", "Fragment child 2 span")
 }
 
 fn testUseState() {
