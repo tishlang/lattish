@@ -559,7 +559,7 @@ export fn useMemo(factory, deps) {
 export fn useRef(initial) {
   let i = hookCursor
   hookCursor = hookCursor + 1
-  while (i < refSlots.length) {
+  while (i >= refSlots.length) {
     refSlots.push(null)
   }
   if (refSlots[i] === null) {

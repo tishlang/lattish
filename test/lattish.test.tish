@@ -69,6 +69,19 @@ fn testUseRef() {
   assert(refVal.current.current.tagName === "DIV", "useRef element is div")
 }
 
+// Regression: useRef must grow refSlots with i >= length (same as useMemo), not i < length
+// (wrong comparison caused infinite push / RangeError when useState ran before useRef).
+fn testUseRefAfterUseState() {
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  root.render(() => {
+    let [n, setN] = useState(0)
+    let r = useRef(null)
+    return h("div", { ref: r }, [String(n)])
+  })
+  assert(ctx.container.firstChild !== null, "useRef after useState renders")
+}
+
 fn testStyleObject() {
   let c = mountInDiv(() => h("span", { style: { display: "none", marginTop: "2px" } }, ["x"]))
   let el = c.firstChild
@@ -81,6 +94,7 @@ fn main() {
   testFragment()
   testUseState()
   testUseRef()
+  testUseRefAfterUseState()
   testStyleObject()
   console.log("Lattish tests passed")
 }
