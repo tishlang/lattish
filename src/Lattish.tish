@@ -1,66 +1,10 @@
 // Lattish: hooks + `h` / `Fragment`. JSX lowers to `h(...)`; `h` builds vnodes, reconciler patches the root (no globals).
 
+import { applyStyleObject, flattenChildren } from "./LattishDom.tish"
+
 export let Fragment = Symbol("Lattish.Fragment")
 
-// --- VDOM: flatten / mount / patch (module-local; not on window) ---
-
-fn flattenInto(out, c) {
-  if (c == null) {
-    return
-  }
-  if (Array.isArray(c)) {
-    let i = 0
-    while (i < c.length) {
-      flattenInto(out, c[i])
-      i = i + 1
-    }
-    return
-  }
-  if (typeof c === "object" && c && c.tag === Fragment) {
-    let inner = c.children
-    if (Array.isArray(inner)) {
-      let j = 0
-      while (j < inner.length) {
-        flattenInto(out, inner[j])
-        j = j + 1
-      }
-    }
-    return
-  }
-  out.push(c)
-}
-
-fn flattenChildren(ch) {
-  let out = []
-  if (Array.isArray(ch)) {
-    let i = 0
-    while (i < ch.length) {
-      flattenInto(out, ch[i])
-      i = i + 1
-    }
-  }
-  return out
-}
-
-// JSX `style={{ display: "none" }}` — camelCase keys, CSSStyleDeclaration values as strings.
-fn applyStyleObject(el, styleObj) {
-  el.style.cssText = ""
-  if (!styleObj || typeof styleObj !== "object") {
-    return
-  }
-  let keys = Object.keys(styleObj)
-  let ki = 0
-  while (ki < keys.length) {
-    let key = keys[ki]
-    let val = styleObj[key]
-    if (val === null || val === undefined || val === false) {
-      ki = ki + 1
-      continue
-    }
-    el.style[key] = String(val)
-    ki = ki + 1
-  }
-}
+// --- VDOM: mount / patch (DOM host); flatten + style live in LattishDom.tish ---
 
 fn applyMountedProp(el, tag, k, v) {
   if (k === "ref") {
@@ -103,7 +47,7 @@ fn mountVnode(v) {
   }
   if (v && v.tag === Fragment) {
     let f = document.createDocumentFragment()
-    let ch = flattenChildren(v.children)
+    let ch = flattenChildren(v.children, Fragment)
     let i = 0
     while (i < ch.length) {
       f.appendChild(mountVnode(ch[i]))
@@ -126,7 +70,7 @@ fn mountVnode(v) {
     }
     ki = ki + 1
   }
-  let ch2 = flattenChildren(v.children)
+  let ch2 = flattenChildren(v.children, Fragment)
   let ci = 0
   while (ci < ch2.length) {
     el.appendChild(mountVnode(ch2[ci]))
@@ -204,8 +148,8 @@ fn patchVnodeEl(el, ov, nv) {
   if (!("style" in p) && op.style !== undefined && op.style !== null) {
     el.style.cssText = ""
   }
-  let ocx = flattenChildren(ov.children)
-  let ncx = flattenChildren(nv.children)
+  let ocx = flattenChildren(ov.children, Fragment)
+  let ncx = flattenChildren(nv.children, Fragment)
   let fullCh = ocx.length !== ncx.length
   if (!fullCh) {
     let j = 0

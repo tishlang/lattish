@@ -1,0 +1,60 @@
+// DOM host helpers (no hooks / no reconciler). `fragmentTag` must be `Fragment` from Lattish.tish.
+// Native `tishlang_ui` mirrors vnode shape; this module is web-only.
+
+export fn flattenInto(out, c, fragmentTag) {
+  if (c == null) {
+    return
+  }
+  if (Array.isArray(c)) {
+    let i = 0
+    while (i < c.length) {
+      flattenInto(out, c[i], fragmentTag)
+      i = i + 1
+    }
+    return
+  }
+  if (typeof c === "object" && c && c.tag === fragmentTag) {
+    let inner = c.children
+    if (Array.isArray(inner)) {
+      let j = 0
+      while (j < inner.length) {
+        flattenInto(out, inner[j], fragmentTag)
+        j = j + 1
+      }
+    }
+    return
+  }
+  out.push(c)
+}
+
+export fn flattenChildren(ch, fragmentTag) {
+  let out = []
+  if (Array.isArray(ch)) {
+    let i = 0
+    while (i < ch.length) {
+      flattenInto(out, ch[i], fragmentTag)
+      i = i + 1
+    }
+  }
+  return out
+}
+
+// JSX `style={{ display: "none" }}` — camelCase keys, CSSStyleDeclaration values as strings.
+export fn applyStyleObject(el, styleObj) {
+  el.style.cssText = ""
+  if (!styleObj || typeof styleObj !== "object") {
+    return
+  }
+  let keys = Object.keys(styleObj)
+  let ki = 0
+  while (ki < keys.length) {
+    let key = keys[ki]
+    let val = styleObj[key]
+    if (val === null || val === undefined || val === false) {
+      ki = ki + 1
+      continue
+    }
+    el.style[key] = String(val)
+    ki = ki + 1
+  }
+}
