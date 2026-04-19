@@ -1,6 +1,6 @@
 // Fragment — group children without a wrapper element
 // Docs: https://lattish.dev/docs/api/exports
-// Compile: tish compile --target js examples/08-fragment.tish -o dist/08-fragment
+// Build: tish build --target js examples/08-fragment.tish -o dist/08-fragment
 
 import { createRoot } from 'lattish'
 

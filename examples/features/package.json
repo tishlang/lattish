@@ -1,15 +1,15 @@
 {
   "name": "lattish-examples",
   "scripts": {
-    "build": "for f in *.tish; do n=$(basename \"$f\" .tish); tish compile --target js \"$f\" -o \"dist/$n\"; done",
-    "build:01": "tish compile --target js 01-counter.tish -o dist/01-counter",
-    "build:02": "tish compile --target js 02-list.tish -o dist/02-list",
-    "build:03": "tish compile --target js 03-greeting.tish -o dist/03-greeting",
-    "build:04": "tish compile --target js 04-ref.tish -o dist/04-ref",
-    "build:05": "tish compile --target js 05-memo.tish -o dist/05-memo",
-    "build:06": "tish compile --target js 06-effects.tish -o dist/06-effects",
-    "build:07": "tish compile --target js 07-batched.tish -o dist/07-batched",
-    "build:08": "tish compile --target js 08-fragment.tish -o dist/08-fragment"
+    "build": "for f in *.tish; do n=$(basename \"$f\" .tish); tish build \"$f\" -o \"dist/$n\" --target js; done",
+    "build:01": "tish build 01-counter.tish -o dist/01-counter --target js",
+    "build:02": "tish build 02-list.tish -o dist/02-list --target js",
+    "build:03": "tish build 03-greeting.tish -o dist/03-greeting --target js",
+    "build:04": "tish build 04-ref.tish -o dist/04-ref --target js",
+    "build:05": "tish build 05-memo.tish -o dist/05-memo --target js",
+    "build:06": "tish build 06-effects.tish -o dist/06-effects --target js",
+    "build:07": "tish build 07-batched.tish -o dist/07-batched --target js",
+    "build:08": "tish build 08-fragment.tish -o dist/08-fragment --target js"
   },
   "dependencies": {
     "lattish": "^1.0.5"

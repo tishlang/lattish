@@ -1,6 +1,6 @@
 // Component pattern — child components with props
 // Docs: https://lattish.dev/docs/getting-started/usage
-// Compile: tish compile --target js examples/03-greeting.tish -o dist/03-greeting
+// Build: tish build --target js examples/03-greeting.tish -o dist/03-greeting
 
 import { createRoot } from 'lattish'
 
