@@ -9,11 +9,24 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
-// 1. Compile test file
-const tish = spawnSync("npx", ["tish", "compile", "--target", "js", "test/lattish.test.tish", "-o", "dist/lattish-test"], {
-  cwd: root,
-  encoding: "utf8",
-});
+// 1. Compile test file (use package name so CI resolves repo devDependency, not a random global `tish`)
+const tish = spawnSync(
+  "npx",
+  [
+    "--no-install",
+    "@tishlang/tish",
+    "build",
+    "test/lattish.test.tish",
+    "-o",
+    "dist/lattish-test",
+    "--target",
+    "js",
+  ],
+  {
+    cwd: root,
+    encoding: "utf8",
+  },
+);
 if (tish.status !== 0) {
   console.error("Compile failed:", tish.stderr || tish.stdout);
   process.exit(1);
