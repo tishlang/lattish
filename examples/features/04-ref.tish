@@ -1,6 +1,6 @@
 // useRef — DOM ref for input focus
 // Docs: https://lattish.dev/docs/api/hooks
-// Compile: tish compile --target js examples/04-ref.tish -o dist/04-ref
+// Build: tish build --target js examples/04-ref.tish -o dist/04-ref
 
 import { useRef, useEffect, createRoot } from 'lattish'
 

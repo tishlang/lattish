@@ -4,7 +4,81 @@ import { applyStyleObject, flattenChildren } from "./LattishDom.tish"
 
 export let Fragment = Symbol("Lattish.Fragment")
 
+// SVG elements must use the SVG namespace or browsers will not paint strokes/paths correctly.
+fn isSvgTag(tag) {
+  if (typeof tag !== "string") {
+    return false
+  }
+  if (tag === "svg" || tag === "g" || tag === "path" || tag === "circle" || tag === "ellipse" || tag === "line" || tag === "rect" || tag === "polyline" || tag === "polygon" || tag === "text" || tag === "defs" || tag === "use" || tag === "symbol" || tag === "mask" || tag === "pattern" || tag === "marker" || tag === "linearGradient" || tag === "radialGradient" || tag === "stop" || tag === "image" || tag === "filter" || tag === "foreignObject" || tag === "textPath" || tag === "tspan" || tag === "title" || tag === "desc" || tag === "clipPath") {
+    return true
+  }
+  if (tag.length >= 2 && tag[0] === "f" && tag[1] === "e") {
+    return true
+  }
+  return false
+}
+
+fn createHostElement(tag) {
+  if (isSvgTag(tag)) {
+    return document.createElementNS("http://www.w3.org/2000/svg", tag)
+  }
+  return document.createElement(tag)
+}
+
+let SVG_NS_URI = "http://www.w3.org/2000/svg"
+
+// SVGElement.className is SVGAnimatedString (setter throws); HTML uses className string.
+fn setDomClass(el, s) {
+  if (el && el.namespaceURI === SVG_NS_URI) {
+    el.setAttribute("class", s)
+  } else {
+    el.className = s
+  }
+}
+
 // --- VDOM: mount / patch (DOM host); flatten + style live in LattishDom.tish ---
+
+fn domEventKey(k) {
+  let dk = k.toLowerCase()
+  if (dk === "ondoubleclick") {
+    return "ondblclick"
+  }
+  return dk
+}
+
+// Avoid assigning input/textarea/select .value during user interaction; native <select> in
+// particular may move focus while the menu is open, so document.activeElement === el is not enough.
+fn skipControlledValueDomWrite(el) {
+  if (!el || el.nodeType !== 1) {
+    return false
+  }
+  let doc = el.ownerDocument
+  if (!doc) {
+    return false
+  }
+  let ae = doc.activeElement
+  if (!ae) {
+    return false
+  }
+  if (ae === el) {
+    return true
+  }
+  if (typeof el.contains === "function") {
+    try {
+      if (el.contains(ae)) {
+        return true
+      }
+    } catch (e0) {}
+  }
+  if (typeof el.matches === "function") {
+    try {
+      if (el.matches(":focus-within")) {
+        return true
+      }
+    } catch (e1) {}
+  }
+  return false
+}
 
 fn applyMountedProp(el, tag, k, v) {
   if (k === "ref") {
@@ -26,12 +100,25 @@ fn applyMountedProp(el, tag, k, v) {
     return
   }
   if (k === "class" || k === "className") {
-    el.className = v
+    setDomClass(el, v)
     return
   }
   if (k.length >= 3 && k[0] === "o" && k[1] === "n" && typeof v === "function") {
     // Property handler only — must match patchVnodeEl so we do not stack addEventListener + onclick (double fire).
-    el[k.toLowerCase()] = (e) => { runBatched(() => v(e)) }
+    if (!el._lattish_events) el._lattish_events = {}
+    el._lattish_events[k] = v
+    el[domEventKey(k)] = (e) => {
+      let handler = el._lattish_events && el._lattish_events[k]
+      if (handler) runBatched(() => handler(e))
+    }
+    return
+  }
+  if (k === "dangerouslySetInnerHTML") {
+    if (v && typeof v === "object" && v.__html !== undefined && v.__html !== null) {
+      el.innerHTML = String(v.__html)
+    } else {
+      el.innerHTML = ""
+    }
     return
   }
   if (k === "value" && (tag === "input" || tag === "textarea" || tag === "select")) {
@@ -42,8 +129,14 @@ fn applyMountedProp(el, tag, k, v) {
 }
 
 fn mountVnode(v) {
+  if (v === null || v === false || v === true) {
+    return document.createComment("")
+  }
   if (typeof v === "string") {
     return document.createTextNode(v)
+  }
+  if (typeof v === "number") {
+    return document.createTextNode(String(v))
   }
   if (v && v.tag === Fragment) {
     let f = document.createDocumentFragment()
@@ -55,7 +148,7 @@ fn mountVnode(v) {
     }
     return f
   }
-  let el = document.createElement(v.tag)
+  let el = createHostElement(v.tag)
   let p = v.props || {}
   let keys = Object.keys(p)
   let ki = 0
@@ -84,17 +177,27 @@ fn mountVnode(v) {
 }
 
 fn patchVnodeEl(el, ov, nv) {
-  if (!el || !ov || !nv) {
+  if (!el || !ov) {
     return false
   }
-  if (typeof nv === "string") {
+  if (nv === null || nv === undefined) {
+    return false
+  }
+  if (typeof nv === "string" || typeof nv === "number") {
+    let s = typeof nv === "string" ? nv : String(nv)
     if (el.nodeType === 3) {
-      el.textContent = nv
+      if (el.textContent !== s) {
+        el.textContent = s
+      }
     }
     return true
   }
   if (ov.tag !== nv.tag) {
     return false
+  }
+  if (ov === nv) {
+    nv._el = el
+    return true
   }
   nv._el = el
   let p = nv.props || {}
@@ -103,16 +206,37 @@ fn patchVnodeEl(el, ov, nv) {
   let ki = 0
   while (ki < keys.length) {
     let k = keys[ki]
-    if (p[k] !== op[k]) {
-      let val = p[k]
-      if (k === "class" || k === "className") {
-        el.className = val || ""
+    let val = p[k]
+    let prev = op[k]
+    let changed = val !== prev
+    if (k === "dangerouslySetInnerHTML") {
+      let nh = val && typeof val === "object" && val.__html !== undefined && val.__html !== null ? String(val.__html) : ""
+      let ph = prev && typeof prev === "object" && prev.__html !== undefined && prev.__html !== null ? String(prev.__html) : ""
+      changed = nh !== ph
+    }
+    if (changed) {
+      if (k === "dangerouslySetInnerHTML") {
+        let html = ""
+        if (val && typeof val === "object" && val.__html !== undefined && val.__html !== null) {
+          html = String(val.__html)
+        }
+        el.innerHTML = html
+      } else if (k === "class" || k === "className") {
+        setDomClass(el, val || "")
       } else {
         if (k.length >= 3 && k[0] === "o" && k[1] === "n") {
           if (typeof val === "function") {
-            el[k.toLowerCase()] = (e) => { runBatched(() => val(e)) }
+            if (!el._lattish_events) el._lattish_events = {}
+            if (!el._lattish_events[k]) {
+              el[domEventKey(k)] = (e) => {
+                let handler = el._lattish_events && el._lattish_events[k]
+                if (handler) runBatched(() => handler(e))
+              }
+            }
+            el._lattish_events[k] = val
           } else {
-            el[k.toLowerCase()] = null
+            if (el._lattish_events) el._lattish_events[k] = null
+            el[domEventKey(k)] = null
           }
         } else {
           if (k === "ref") {
@@ -133,11 +257,24 @@ fn patchVnodeEl(el, ov, nv) {
           }
           if (k !== "ref" && k !== "disabled" && k !== "style") {
             if (k === "value" && (nv.tag === "input" || nv.tag === "textarea" || nv.tag === "select")) {
-              if (el !== document.activeElement) {
-                el.value = val
+              if (!skipControlledValueDomWrite(el)) {
+                if (nv.tag === "select") {
+                  let vs = String(val)
+                  if (el.value !== vs) {
+                    el.value = vs
+                  }
+                } else {
+                  el.value = val
+                }
               }
             } else {
-              el.setAttribute(k, String(val))
+              if (val === false || val === null || val === undefined) {
+                el.removeAttribute(k)
+              } else if (val === true) {
+                el.setAttribute(k, k)
+              } else {
+                el.setAttribute(k, String(val))
+              }
             }
           }
         }
@@ -156,12 +293,12 @@ fn patchVnodeEl(el, ov, nv) {
     while (j < ncx.length) {
       let o = ocx[j]
       let n = ncx[j]
-      if (typeof n === "string") {
-        if (typeof o !== "string") {
+      if (typeof n === "string" || typeof n === "number") {
+        if (!(typeof o === "string" || typeof o === "number")) {
           fullCh = true
         }
       } else {
-        if (typeof o === "string") {
+        if (typeof o === "string" || typeof o === "number") {
           fullCh = true
         } else {
           if (!o || o.tag !== n.tag) {
@@ -202,9 +339,16 @@ fn patchVnodeEl(el, ov, nv) {
       i = i + 1
       continue
     }
-    if (typeof n === "string") {
+    if (o === n) {
+      i = i + 1
+      continue
+    }
+    if (typeof n === "string" || typeof n === "number") {
+      let ns = typeof n === "string" ? n : String(n)
       if (childEl && childEl.nodeType === 3) {
-        childEl.textContent = n
+        if (childEl.textContent !== ns) {
+          childEl.textContent = ns
+        }
       } else {
         let m = mountVnode(n)
         if (childEl) {
@@ -216,7 +360,7 @@ fn patchVnodeEl(el, ov, nv) {
       i = i + 1
       continue
     }
-    if (typeof o === "string" || o.tag !== n.tag) {
+    if (typeof o === "string" || typeof o === "number" || o.tag !== n.tag) {
       let m = mountVnode(n)
       if (childEl) {
         el.replaceChild(m, childEl)
@@ -469,6 +613,10 @@ export fn useState(init) {
     scheduleFlush()
   }
   return [stateSlots[i], setState]
+}
+
+export fn getHookCursor() {
+  return hookCursor;
 }
 
 export fn useMemo(factory, deps) {

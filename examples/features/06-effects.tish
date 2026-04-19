@@ -1,6 +1,6 @@
 // useEffect — side effects after render
 // Docs: https://lattish.dev/docs/api/hooks
-// Compile: tish compile --target js examples/06-effects.tish -o dist/06-effects
+// Build: tish build --target js examples/06-effects.tish -o dist/06-effects
 
 import { useState, useEffect, createRoot } from 'lattish'
 

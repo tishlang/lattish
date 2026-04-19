@@ -1,6 +1,6 @@
 // Counter — useState, createRoot
 // Docs: https://lattish.dev/docs/getting-started/usage
-// Compile: tish compile --target js examples/01-counter.tish -o dist/01-counter
+// Build: tish build --target js examples/01-counter.tish -o dist/01-counter
 
 import { useState, createRoot } from 'lattish'
 

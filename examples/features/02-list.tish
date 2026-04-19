@@ -1,6 +1,6 @@
 // List — useState with array, mapping over items
 // Docs: https://lattish.dev/docs/getting-started/usage
-// Compile: tish compile --target js examples/02-list.tish -o dist/02-list
+// Build: tish build --target js examples/02-list.tish -o dist/02-list
 
 import { useState, createRoot } from 'lattish'
 

@@ -1,7 +1,7 @@
 // Automatic batching (React 18 style)
 // Docs: https://lattish.dev/docs/api/hooks
 // Event handlers batch updates by default: 3 setState calls = 1 re-render
-// Compile: tish compile --target js examples/07-batched.tish -o dist/07-batched
+// Build: tish build --target js examples/07-batched.tish -o dist/07-batched
 
 import { useState, createRoot } from 'lattish'
 

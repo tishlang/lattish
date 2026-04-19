@@ -2,29 +2,29 @@
 // Native `tishlang_ui` mirrors vnode shape; this module is web-only.
 
 export fn flattenInto(out, c, fragmentTag) {
-  if (c == null) {
-    return
-  }
-  if (Array.isArray(c)) {
-    let i = 0
-    while (i < c.length) {
-      flattenInto(out, c[i], fragmentTag)
-      i = i + 1
-    }
-    return
-  }
-  if (typeof c === "object" && c && c.tag === fragmentTag) {
-    let inner = c.children
-    if (Array.isArray(inner)) {
-      let j = 0
-      while (j < inner.length) {
-        flattenInto(out, inner[j], fragmentTag)
-        j = j + 1
+  // Do not use `if (c == null) { return }` here — `tish build --target js` lowers it to an empty if + unconditional return.
+  if ((c !== null) && (typeof c !== "boolean")) {
+    if (Array.isArray(c)) {
+      let i = 0
+      while (i < c.length) {
+        flattenInto(out, c[i], fragmentTag)
+        i = i + 1
       }
+      return
     }
-    return
+    if (typeof c === "object" && c && c.tag === fragmentTag) {
+      let inner = c.children
+      if (Array.isArray(inner)) {
+        let j = 0
+        while (j < inner.length) {
+          flattenInto(out, inner[j], fragmentTag)
+          j = j + 1
+        }
+      }
+      return
+    }
+    out.push(c)
   }
-  out.push(c)
 }
 
 export fn flattenChildren(ch, fragmentTag) {
@@ -54,7 +54,12 @@ export fn applyStyleObject(el, styleObj) {
       ki = ki + 1
       continue
     }
-    el.style[key] = String(val)
+    let s = String(val)
+    if (key.indexOf("-") >= 0) {
+      el.style.setProperty(key, s)
+    } else {
+      el.style[key] = s
+    }
     ki = ki + 1
   }
 }

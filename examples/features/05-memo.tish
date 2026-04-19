@@ -1,6 +1,6 @@
 // useMemo — memoized computed value (matches React: factory, deps)
 // Docs: https://lattish.dev/docs/api/hooks
-// Compile: tish compile --target js examples/05-memo.tish -o dist/05-memo
+// Build: tish build --target js examples/05-memo.tish -o dist/05-memo
 
 import { useState, useMemo, createRoot } from 'lattish'
 
