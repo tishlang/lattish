@@ -2,7 +2,7 @@
 // Requires DOM (jsdom). Tests h(), Fragment, useState, useRef, createRoot.
 // h() returns vnodes; DOM is produced by createRoot / patchRoot.
 
-import { h, Fragment, useState, useRef, createRoot } from "../src/Lattish.tish"
+import { h, Fragment, useState, useRef, createRoot, memo, signal, runBatched } from "../src/Lattish.tish"
 
 fn assert(cond, msg) {
   if (!cond) {
@@ -89,6 +89,92 @@ fn testStyleObject() {
   assert(el.style.marginTop === "2px", "style marginTop")
 }
 
+// memo(viewFn) skips the body when shallow props match. Verify cache hits
+// reuse the previous vnode reference (which is what makes the diff bypass
+// the subtree on patchRoot). `runBatched` synchronously flushes on exit so
+// we don't need Promise plumbing to drive a re-render in tests.
+fn testMemoSkipsBody() {
+  let calls = 0
+  let Leaf = memo((p) => {
+    calls = calls + 1
+    return h("div", null, [String(p.label)])
+  })
+  let outerSignal = signal(0)
+  let labelSignal = signal("a")
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  root.render(() => {
+    return h("div", null, [
+      h("span", null, [String(outerSignal())]),
+      h(Leaf, { label: labelSignal() }, [])
+    ])
+  })
+  assert(calls === 1, "memo: body called once on first render")
+  runBatched(() => outerSignal((v) => v + 1))
+  assert(calls === 1, "memo: body NOT called again when props unchanged")
+  runBatched(() => labelSignal("b"))
+  assert(calls === 2, "memo: body called when props change")
+}
+
+// memo() must advance hookCursor by the subtree's hook count on a cache
+// hit so any state slots used after the memo'd view stay aligned. We probe
+// the alignment by giving the outer component its own useRef whose stable
+// identity must survive multiple flushes; if the cache hit shifted slot
+// indices, the outer ref would be re-allocated each render and identity
+// would drift.
+fn testMemoPreservesHookCursor() {
+  let leafCalls = { n: 0 }
+  let outerRefSeen = { ref: null, drift: false }
+  let Leaf = memo((p) => {
+    leafCalls.n = leafCalls.n + 1
+    let r = useRef(p.label)
+    r.current = p.label
+    return h("span", null, [r.current])
+  })
+  let labelSig = signal("a")
+  let tickSig = signal(0)
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  fn App() {
+    return h("div", null, [
+      h(Leaf, { label: labelSig() }, []),
+      h("span", null, [String(tickSig())])
+    ])
+  }
+  // Wrap the outer ref read in a separate component-like function so we
+  // can check identity across renders without tish's per-let block scoping
+  // hiding the binding from JSX siblings.
+  fn OuterRefProbe() {
+    let r = useRef({ allocated: true })
+    if (outerRefSeen.ref === null) {
+      outerRefSeen.ref = r
+    } else if (outerRefSeen.ref !== r) {
+      outerRefSeen.drift = true
+    }
+    return null
+  }
+  root.render(() => h(Fragment, null, [h(Leaf, { label: labelSig() }, []), h(OuterRefProbe, null, [])]))
+  assert(leafCalls.n === 1, "memo: first render calls leaf body once")
+  runBatched(() => tickSig(1)) // unrelated state change → re-render same tree
+  assert(leafCalls.n === 1, "memo: tick flush did NOT re-call leaf body")
+  assert(outerRefSeen.drift === false, "memo: hook cursor preserved (outer useRef identity stable)")
+  runBatched(() => labelSig("b")) // props changed → cache miss
+  assert(leafCalls.n === 2, "memo: label change re-ran leaf body")
+  assert(outerRefSeen.drift === false, "memo: hook cursor still aligned after cache miss")
+}
+
+// signal() reads/writes in a callable cell and schedules a flush on write.
+fn testSignalDrivesRender() {
+  let s = signal(1)
+  assert(s() === 1, "signal initial read")
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  root.render(() => h("div", null, [String(s())]))
+  assert(ctx.container.textContent === "1", "signal initial render")
+  runBatched(() => s(2))
+  assert(ctx.container.textContent === "2", "signal write flushes")
+}
+
 fn main() {
   testH()
   testFragment()
@@ -96,6 +182,9 @@ fn main() {
   testUseRef()
   testUseRefAfterUseState()
   testStyleObject()
+  testMemoSkipsBody()
+  testMemoPreservesHookCursor()
+  testSignalDrivesRender()
   console.log("Lattish tests passed")
 }
 

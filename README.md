@@ -26,7 +26,7 @@ fn App() {
 createRoot(document.getElementById("root")).render(App)
 ```
 
-Requires the [Tish](https://github.com/tishlang/tish) compiler with `--jsx lattish` (default) and node_modules resolution for bare specifiers. The compiler lowers JSX to calls that Lattish provides.
+Requires the [Tish](https://github.com/tishlang/tish) compiler and node_modules resolution for bare specifiers. JSX is built in: `tish build --target js` always lowers JSX to calls that Lattish provides — no extra flag.
 
 ## Exports
 

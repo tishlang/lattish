@@ -1,6 +1,6 @@
 // Lattish: hooks + `h` / `Fragment`. JSX lowers to `h(...)`; `h` builds vnodes, reconciler patches the root (no globals).
 
-import { applyStyleObject, flattenChildren } from "./LattishDom.tish"
+import { applyStyleObject, clearLattishStyleKeys, flattenChildren } from "./LattishDom.tish"
 
 export let Fragment = Symbol("Lattish.Fragment")
 
@@ -252,7 +252,12 @@ fn patchVnodeEl(el, ov, nv) {
             if (val && typeof val === "object") {
               applyStyleObject(el, val)
             } else {
-              el.style.cssText = ""
+              // String/null/undefined style — clear what lattish wrote, leave
+              // imperative inline styles (transforms from drag code, etc.) intact.
+              clearLattishStyleKeys(el)
+              if (typeof val === "string") {
+                el.setAttribute("style", val)
+              }
             }
           }
           if (k !== "ref" && k !== "disabled" && k !== "style") {
@@ -283,7 +288,7 @@ fn patchVnodeEl(el, ov, nv) {
     ki = ki + 1
   }
   if (!("style" in p) && op.style !== undefined && op.style !== null) {
-    el.style.cssText = ""
+    clearLattishStyleKeys(el)
   }
   let ocx = flattenChildren(ov.children, Fragment)
   let ncx = flattenChildren(nv.children, Fragment)
@@ -301,7 +306,7 @@ fn patchVnodeEl(el, ov, nv) {
         if (typeof o === "string" || typeof o === "number") {
           fullCh = true
         } else {
-          if (!o || o.tag !== n.tag) {
+          if (o == null || n == null || o.tag !== n.tag) {
             fullCh = true
           }
         }
@@ -418,6 +423,15 @@ fn patchRoot(container, oldTree, newTree) {
 // --- h: vnode factory (compiler JSX) ---
 
 export fn h(tag, props, children) {
+  // Hoist locals: tish JS lowering wraps the first let in h() in an isolated block; keep a
+  // throwaway binding first so raw/p/keys stay in one scope for the function-component branch.
+  let __hScopePad = 0
+  let raw = null
+  let p = {}
+  let keys = null
+  let i = 0
+  let k = null
+  let result = null
   if (children === undefined || children === null) {
     children = []
   }
@@ -425,19 +439,24 @@ export fn h(tag, props, children) {
     children = [children]
   }
   if (typeof tag === "function") {
-    let p = props && props !== null ? props : {}
-    if (children.length > 0) {
-      let newProps = {}
-      let keys = Object.keys(p)
-      let i = 0
-      while (i < keys.length) {
-        newProps[keys[i]] = p[keys[i]]
-        i = i + 1
-      }
-      newProps.children = children
-      p = newProps
+    raw = props && props !== null ? props : {}
+    p = {}
+    keys = Object.keys(raw)
+    i = 0
+    while (i < keys.length) {
+      k = keys[i]
+      if (k !== "key") { p[k] = raw[k] }
+      i = i + 1
     }
-    return tag(p)
+    if (children.length > 0) {
+      p.children = children
+    }
+    // key prop is consumed by the scope manager; not forwarded to the component.
+    enterChildScope(tag, (("key" in raw) && raw["key"] !== null && raw["key"] !== undefined) ? raw["key"] : null)
+    result = null
+    try { result = tag(p) }
+    finally { exitChildScope() }
+    return result
   }
   if (tag === Fragment) {
     return { tag: Fragment, props: null, children: children, _el: null }
@@ -450,125 +469,321 @@ export fn text(s) {
 }
 
 // --- Reconciler ---
+//
+// Per-component hook scopes
+// =========================
+//
+// Every function-component invocation owns its own scope. A scope holds:
+//   - five separate slot bags (state, ref, memo, layoutEffect, effect),
+//     each with its own cursor; this means hooks of different kinds don't
+//     interfere with each other and we never need cross-kind gap-filling.
+//   - childSiblingCounts: per-render tally used to assign stable child IDs
+//     when no `key` prop is supplied.
+//   - children: map of "key" -> child Scope. Across renders, a child at the
+//     same logical position keeps its scope (and thus its hook state).
+//   - visited: set true when this scope was reached during the current
+//     render; after render we prune any scope that wasn't (running its
+//     effect cleanups) so disappeared components don't leak subscriptions.
+//
+// This eliminates the entire class of "wrong shape from another component"
+// bugs that the global-hookCursor design produced when conditional rendering
+// caused two components to alias the same slot index across renders.
 
-let stateSlots = []
-let hookCursor = 0
-let rootContainer = null
-let rootComponent = null
-let rootVnode = null
+// Multiple `createRoot(container).render(App)` in one bundle each keep their own
+// vnode tree and hook scope. A single global root would let the last mount win
+// and starve every other subtree of flushes (IDE workbench chrome mounts many roots).
+let rootList = []
 
-let memoSlots = []
-let refSlots = []
-let layoutEffectSlots = []
-let effectSlots = []
+fn findRootIndex(container) {
+  let i = 0
+  while (i < rootList.length) {
+    if (rootList[i].container === container) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+fn getOrCreateRootEntry(container) {
+  let ix = findRootIndex(container)
+  if (ix >= 0) {
+    return rootList[ix]
+  }
+  let entry = { container: container, App: null, vnode: null, scope: null }
+  rootList.push(entry)
+  return entry
+}
 
 let flushScheduled = false
 let batchDepth = 0
 let dirtyFromBatch = false
 let effectsMicrotaskScheduled = false
 
+fn makeBag() { return { slots: [], cursor: 0 } }
+
+fn makeScope() {
+  return {
+    state:        makeBag(),
+    ref:          makeBag(),
+    memo:         makeBag(),
+    layoutEffect: makeBag(),
+    effect:       makeBag(),
+    childSiblingCounts: {},
+    children: {},
+    visited: false,
+    memoCache: null
+  }
+}
+
+fn resetScope(scope) {
+  scope.state.cursor = 0
+  scope.ref.cursor = 0
+  scope.memo.cursor = 0
+  scope.layoutEffect.cursor = 0
+  scope.effect.cursor = 0
+  scope.childSiblingCounts = {}
+  scope.visited = true
+}
+
+let rootScope = makeScope()
+let currentScope = rootScope
+let scopeStack = []
+
+// Stable per-function id (functions are objects; we stash the id once so
+// we can use string keys in scope.children without WeakMap).
+let nextFnId = 0
+fn fnIdString(f) {
+  if ("_lattishFnId" in f) { return f._lattishFnId }
+  nextFnId = nextFnId + 1
+  f._lattishFnId = "f" + String(nextFnId)
+  return f._lattishFnId
+}
+
+// JS-target codegen wraps property access with `?? null`, so reading a
+// missing key produces null instead of throwing. We can't use `delete` on
+// objects in Tish (compiles to invalid JS), so omit-by-copy.
+fn omitKey(obj, key) {
+  let out = {}
+  let keys = Object.keys(obj)
+  let i = 0
+  while (i < keys.length) {
+    if (keys[i] !== key) { out[keys[i]] = obj[keys[i]] }
+    i = i + 1
+  }
+  return out
+}
+
+fn enterChildScope(f, keyOrNull) {
+  let id = null
+  if (keyOrNull !== null) {
+    id = "k:" + String(keyOrNull)
+  } else {
+    let fid = fnIdString(f)
+    let n = 0
+    if (fid in currentScope.childSiblingCounts) { n = currentScope.childSiblingCounts[fid] }
+    currentScope.childSiblingCounts[fid] = n + 1
+    id = fid + "#" + String(n)
+  }
+  let child = null
+  if (id in currentScope.children) { child = currentScope.children[id] }
+  if (child === null) {
+    child = makeScope()
+    currentScope.children[id] = child
+  }
+  resetScope(child)
+  scopeStack.push(currentScope)
+  currentScope = child
+}
+
+fn exitChildScope() {
+  if (scopeStack.length > 0) { currentScope = scopeStack.pop() }
+  else { currentScope = rootScope }
+}
+
 fn depsChanged(prev, next) {
-  if (prev === null) {
-    return true
-  }
-  if (next === null || prev === null) {
-    return true
-  }
-  if (prev.length !== next.length) {
-    return true
-  }
+  if (prev === null || next === null) { return true }
+  if (prev.length !== next.length) { return true }
   let j = 0
   while (j < next.length) {
-    if (prev[j] !== next[j]) {
-      return true
-    }
+    if (prev[j] !== next[j]) { return true }
     j = j + 1
   }
   return false
 }
 
-fn runLayoutEffects() {
+// Run pending layout-effect slots in this scope (parent before children).
+fn runLayoutEffectsTree(scope) {
   let i = 0
-  while (i < layoutEffectSlots.length) {
-    let s = layoutEffectSlots[i]
-    if (s && s.pending) {
+  let bag = scope.layoutEffect
+  while (i < bag.slots.length) {
+    let s = bag.slots[i]
+    if (s !== null && s.pending) {
       s.pending = false
-      if (s.cleanup) {
-        s.cleanup()
-        s.cleanup = null
-      }
+      if (s.cleanup !== null) { s.cleanup(); s.cleanup = null }
       let c = s.effect()
-      if (typeof c === "function") {
-        s.cleanup = c
-      }
+      if (typeof c === "function") { s.cleanup = c }
     }
     i = i + 1
+  }
+  let kids = Object.keys(scope.children)
+  let k = 0
+  while (k < kids.length) {
+    runLayoutEffectsTree(scope.children[kids[k]])
+    k = k + 1
+  }
+}
+
+fn runEffectsTree(scope) {
+  let i = 0
+  let bag = scope.effect
+  while (i < bag.slots.length) {
+    let s = bag.slots[i]
+    if (s !== null && s.pending) {
+      s.pending = false
+      if (s.cleanup !== null) { s.cleanup(); s.cleanup = null }
+      let c = s.effect()
+      if (typeof c === "function") { s.cleanup = c }
+    }
+    i = i + 1
+  }
+  let kids = Object.keys(scope.children)
+  let k = 0
+  while (k < kids.length) {
+    runEffectsTree(scope.children[kids[k]])
+    k = k + 1
   }
 }
 
 fn scheduleEffectsFlush() {
-  if (effectsMicrotaskScheduled) {
-    return
-  }
+  if (effectsMicrotaskScheduled) { return }
   effectsMicrotaskScheduled = true
   queueMicrotask(() => {
     effectsMicrotaskScheduled = false
-    let i = 0
-    while (i < effectSlots.length) {
-      let s = effectSlots[i]
-      if (s && s.pending) {
-        s.pending = false
-        if (s.cleanup) {
-          s.cleanup()
-          s.cleanup = null
-        }
-        let c = s.effect()
-        if (typeof c === "function") {
-          s.cleanup = c
-        }
+    let ri = 0
+    while (ri < rootList.length) {
+      let sc = rootList[ri].scope
+      if (sc !== null) {
+        runEffectsTree(sc)
       }
-      i = i + 1
+      ri = ri + 1
     }
   })
 }
 
-fn effectSlot(slots, effect, deps, scheduleAsync) {
-  let i = hookCursor
-  hookCursor = hookCursor + 1
-  while (i >= slots.length) {
-    slots.push(null)
+// Run all effect cleanups in a scope (and its descendants) — used when a
+// scope is pruned (its component is no longer in the tree).
+fn cleanupScope(scope) {
+  let i = 0
+  let lbag = scope.layoutEffect
+  while (i < lbag.slots.length) {
+    let s = lbag.slots[i]
+    if (s !== null && s.cleanup !== null) {
+      try { s.cleanup() } catch (e) { }
+      s.cleanup = null
+    }
+    i = i + 1
   }
-  let slot = slots[i]
-  if (slot === null) {
-    slot = { deps: null, effect: null, cleanup: null, pending: false }
-    slots[i] = slot
+  i = 0
+  let ebag = scope.effect
+  while (i < ebag.slots.length) {
+    let s = ebag.slots[i]
+    if (s !== null && s.cleanup !== null) {
+      try { s.cleanup() } catch (e) { }
+      s.cleanup = null
+    }
+    i = i + 1
   }
+  let kids = Object.keys(scope.children)
+  let k = 0
+  while (k < kids.length) {
+    cleanupScope(scope.children[kids[k]])
+    k = k + 1
+  }
+}
+
+// After a render: drop child scopes that weren't visited; reset visited on
+// the rest so the next render starts fresh.
+fn pruneAndReset(scope) {
+  let kids = Object.keys(scope.children)
+  let k = 0
+  while (k < kids.length) {
+    let id = kids[k]
+    let child = scope.children[id]
+    if (!child.visited) {
+      cleanupScope(child)
+      scope.children = omitKey(scope.children, id)
+    } else {
+      pruneAndReset(child)
+      child.visited = false
+    }
+    k = k + 1
+  }
+}
+
+fn effectSlot(bag, effect, deps, scheduleAsync) {
+  let i = bag.cursor
+  bag.cursor = bag.cursor + 1
+  if (i >= bag.slots.length) {
+    bag.slots.push({ deps: null, effect: null, cleanup: null, pending: false })
+  }
+  let slot = bag.slots[i]
   if (depsChanged(slot.deps, deps)) {
     slot.deps = deps
     slot.effect = effect
     slot.pending = true
-    if (scheduleAsync) {
-      scheduleEffectsFlush()
-    }
+    if (scheduleAsync) { scheduleEffectsFlush() }
   }
 }
 
 export fn useLayoutEffect(effect, deps) {
-  effectSlot(layoutEffectSlots, effect, deps, false)
+  effectSlot(currentScope.layoutEffect, effect, deps, false)
 }
 
 export fn useEffect(effect, deps) {
-  effectSlot(effectSlots, effect, deps, true)
+  effectSlot(currentScope.effect, effect, deps, true)
+}
+
+fn flushOneRootEntry(entry) {
+  if (!entry.container || !entry.App || !entry.scope) {
+    return
+  }
+  /* Phase-resolved profiling so the perf HUD can break down a slow
+     flush into "rootComponent ran" vs "DOM patch happened". Stored on
+     window so probes can read without a runtime export. */
+  let profile = (typeof window !== "undefined") ? window : null
+  let t0 = (profile && profile.performance && profile.performance.now) ? profile.performance.now() : 0
+  if (profile) profile.__lattishRendering = true
+
+  rootScope = entry.scope
+  resetScope(entry.scope)
+  currentScope = entry.scope
+  scopeStack = []
+
+  let newTree = entry.App()
+  if (profile) profile.__lattishRendering = false
+  let t1 = (profile && profile.performance && profile.performance.now) ? profile.performance.now() : 0
+  patchRoot(entry.container, entry.vnode, newTree)
+  let t2 = (profile && profile.performance && profile.performance.now) ? profile.performance.now() : 0
+  entry.vnode = newTree
+  pruneAndReset(entry.scope)
+  runLayoutEffectsTree(entry.scope)
+  scheduleEffectsFlush()
+  if (profile) {
+    profile.__lattishLastRenderMs = t1 - t0
+    profile.__lattishLastPatchMs = t2 - t1
+    profile.__lattishLastFlushMs = t2 - t0
+    if (typeof profile.__lattishOnFlush === "function") {
+      profile.__lattishOnFlush(t1 - t0, t2 - t1)
+    }
+  }
 }
 
 fn flushRender() {
-  hookCursor = 0
-  if (rootContainer && rootComponent) {
-    let newTree = rootComponent()
-    patchRoot(rootContainer, rootVnode, newTree)
-    rootVnode = newTree
-    runLayoutEffects()
-    scheduleEffectsFlush()
+  let i = 0
+  while (i < rootList.length) {
+    flushOneRootEntry(rootList[i])
+    i = i + 1
   }
 }
 
@@ -587,7 +802,7 @@ fn scheduleFlush() {
   })
 }
 
-fn runBatched(run) {
+export fn runBatched(run) {
   batchDepth = batchDepth + 1
   run()
   batchDepth = batchDepth - 1
@@ -599,87 +814,180 @@ fn runBatched(run) {
 }
 
 export fn useState(init) {
-  let i = hookCursor
-  hookCursor = hookCursor + 1
-  if (i >= stateSlots.length) {
-    stateSlots.push(init)
-  }
+  let scope = currentScope
+  let bag = scope.state
+  let i = bag.cursor
+  bag.cursor = bag.cursor + 1
+  if (i >= bag.slots.length) { bag.slots.push(init) }
   fn setState(v) {
-    if (typeof v === "function") {
-      stateSlots[i] = v(stateSlots[i])
-    } else {
-      stateSlots[i] = v
+    if (typeof v === "function") { bag.slots[i] = v(bag.slots[i]) }
+    else { bag.slots[i] = v }
+    /* Diagnostic hook for runaway-render investigation. PerfHud reads this
+       to attribute setState calls to a stack frame so we can see who is
+       calling setState during render (which would cause an infinite flush
+       loop). Opt-in for zero cost when nothing is reading. */
+    if (typeof window !== "undefined" && window.__lattishSetStateProbe) {
+      try { window.__lattishSetStateProbe(i) } catch (eP) {}
     }
     scheduleFlush()
   }
-  return [stateSlots[i], setState]
+  return [bag.slots[i], setState]
 }
 
+// Kept for backwards compat with older perf-hud probes; reports the current
+// scope's state cursor (was a single global, now per-scope).
 export fn getHookCursor() {
-  return hookCursor;
+  return currentScope.state.cursor
 }
 
-export fn useMemo(factory, deps) {
-  let i = hookCursor
-  hookCursor = hookCursor + 1
-  while (i >= memoSlots.length) {
-    memoSlots.push(null)
-  }
-  let slot = memoSlots[i]
+fn memoLookup(bag, factory, deps) {
+  let i = bag.cursor
+  bag.cursor = bag.cursor + 1
+  if (i >= bag.slots.length) { bag.slots.push(null) }
+  let slot = bag.slots[i]
   let stale = true
-  if (slot) {
+  if (slot !== null) {
     stale = false
-    if (slot.deps.length !== deps.length) {
-      stale = true
-    } else {
+    if (slot.deps.length !== deps.length) { stale = true }
+    else {
       let j = 0
       while (j < deps.length) {
-        if (slot.deps[j] !== deps[j]) {
-          stale = true
-          break
-        }
+        if (slot.deps[j] !== deps[j]) { stale = true; break }
         j = j + 1
       }
     }
   }
-  if (stale) {
-    memoSlots[i] = { deps: deps, value: factory() }
-  }
-  return memoSlots[i].value
+  if (stale) { bag.slots[i] = { deps: deps, value: factory() } }
+  return bag.slots[i].value
+}
+
+export fn useMemo(factory, deps) {
+  return memoLookup(currentScope.memo, factory, deps)
+}
+
+export fn useCallback(callback, deps) {
+  return memoLookup(currentScope.memo, () => callback, deps)
 }
 
 export fn useRef(initial) {
-  let i = hookCursor
-  hookCursor = hookCursor + 1
-  while (i >= refSlots.length) {
-    refSlots.push(null)
+  let bag = currentScope.ref
+  let i = bag.cursor
+  bag.cursor = bag.cursor + 1
+  if (i >= bag.slots.length) { bag.slots.push({ current: initial }) }
+  return bag.slots[i]
+}
+
+// Shallow object equality: same set of keys and `===` for each value.
+// Children arrays are compared by element reference (same as React.memo
+// default), so a parent that rebuilds child vnodes every render won't get
+// memo wins unless it also memoizes them — that's inherent to a pull-based
+// reconciler, not a lattish quirk.
+fn shallowEqualProps(a, b) {
+  if (a === b) {
+    return true
   }
-  if (refSlots[i] === null) {
-    refSlots[i] = { current: initial }
+  if (a === null || b === null) {
+    return false
   }
-  return refSlots[i]
+  if (typeof a !== "object" || typeof b !== "object") {
+    return false
+  }
+  let ak = Object.keys(a)
+  let bk = Object.keys(b)
+  if (ak.length !== bk.length) {
+    return false
+  }
+  let i = 0
+  while (i < ak.length) {
+    let k = ak[i]
+    if (!Object.prototype.hasOwnProperty.call(b, k)) {
+      return false
+    }
+    if (a[k] !== b[k]) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+// `memo(viewFn, areEqual?)` wraps a view function so subsequent renders reuse
+// the previous vnode (and the previous DOM subtree, via reconciler reference
+// equality) when props are shallow-equal.
+//
+// With per-component scopes, this is dramatically simpler than the old
+// global-cursor design: the wrapped fn IS a function-component, so when h()
+// invokes it the wrapper enters its own scope. Cache state lives on the
+// scope itself (`scope.memoCache`) and persists across renders for the same
+// logical position. On cache hit we return the previously-built vnode
+// without running the body — the descendant scopes still exist with their
+// hook state intact, untouched. On cache miss we run the body fresh.
+//
+// Pair memo views with `signal()` or with prop changes triggered by parent
+// `setState` to drive cache invalidation. Don't put a tick that resets state
+// inside a memo'd view body — the body won't re-run on subsequent hits.
+export fn memo(viewFn, areEqual) {
+  let eq = typeof areEqual === "function" ? areEqual : shallowEqualProps
+  fn wrapped(props) {
+    let scope = currentScope
+    if (scope.memoCache !== null && eq(scope.memoCache.props, props)) {
+      return scope.memoCache.vnode
+    }
+    let vnode = viewFn(props)
+    scope.memoCache = { props: props, vnode: vnode }
+    return vnode
+  }
+  wrapped._lattishMemoWrapped = true
+  return wrapped
+}
+
+// Fine-grained reactive primitive. `signal(initial)` returns a callable cell
+// that reads the current value when invoked with no args and writes when
+// invoked with one. Reading a signal during render subscribes the current
+// `rootComponent` flush; writing schedules the next flush. Use when you want
+// state that lives outside React-style hook positions (e.g. shared between
+// a builder and a renderer).
+export fn signal(initial) {
+  let value = initial
+  fn s(next) {
+    if (next === undefined) {
+      return value
+    }
+    if (typeof next === "function") {
+      next = next(value)
+    }
+    if (next !== value) {
+      value = next
+      scheduleFlush()
+    }
+    return value
+  }
+  s._lattishSignal = true
+  return s
 }
 
 export fn createRoot(container) {
   fn render(App) {
-    rootContainer = container
-    rootComponent = App
-    stateSlots = []
-    memoSlots = []
-    refSlots = []
-    layoutEffectSlots = []
-    effectSlots = []
-    hookCursor = 0
+    let entry = getOrCreateRootEntry(container)
+    entry.App = App
     flushScheduled = false
     batchDepth = 0
     dirtyFromBatch = false
     effectsMicrotaskScheduled = false
-    rootVnode = null
+    entry.vnode = null
+
+    // Reset the root scope and any prior tree for a fresh mount.
+    entry.scope = makeScope()
+    rootScope = entry.scope
+    currentScope = entry.scope
+    scopeStack = []
+
+    resetScope(entry.scope)
     let tree = App()
     patchRoot(container, null, tree)
-    rootVnode = tree
-    hookCursor = 0
-    runLayoutEffects()
+    entry.vnode = tree
+    pruneAndReset(entry.scope)
+    runLayoutEffectsTree(entry.scope)
     scheduleEffectsFlush()
   }
   return { render: render }

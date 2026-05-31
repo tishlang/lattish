@@ -3,7 +3,9 @@
 
 export fn flattenInto(out, c, fragmentTag) {
   // Do not use `if (c == null) { return }` here — `tish build --target js` lowers it to an empty if + unconditional return.
-  if ((c !== null) && (typeof c !== "boolean")) {
+  // Skip `undefined` too: sparse arrays / `.map` without a return otherwise land in flattened children and
+  // `patchVnodeEl` can throw when comparing tags.
+  if ((c !== null) && (c !== undefined) && (typeof c !== "boolean")) {
     if (Array.isArray(c)) {
       let i = 0
       while (i < c.length) {
@@ -39,27 +41,100 @@ export fn flattenChildren(ch, fragmentTag) {
   return out
 }
 
+// Set a single style key (camelCase or kebab-case). Returns the
+// canonical key name we recorded so unset can mirror it later.
+fn writeStyleKey(el, key, val) {
+  let s = String(val)
+  if (key.indexOf("-") >= 0) {
+    el.style.setProperty(key, s)
+  } else {
+    el.style[key] = s
+  }
+  return key
+}
+
+fn unsetStyleKey(el, key) {
+  if (key.indexOf("-") >= 0) {
+    el.style.removeProperty(key)
+  } else {
+    el.style[key] = ""
+  }
+}
+
 // JSX `style={{ display: "none" }}` — camelCase keys, CSSStyleDeclaration values as strings.
+//
+// Diff-based with VALUE caching: we remember the keys lattish wrote
+// (`el._lattish_styleKeys`) AND each key's last-applied stringified value
+// (`el._lattish_styleVals`) so on subsequent renders we only touch keys whose
+// value actually changed. Without this, any component that re-renders (a 200ms
+// setInterval ticker, a parent passing fresh inline styles, etc.) writes every
+// style property to the DOM every frame even when nothing about the style
+// changed — that adds up to thousands of pointless DOM writes per second on
+// the patch board and pegs the main thread.
+//
+// Imperative writes (e.g. `el.style.transform = ...` from drag code) still
+// survive a re-render unless the JSX style object also declares that key.
 export fn applyStyleObject(el, styleObj) {
-  el.style.cssText = ""
+  let prevKeys = el._lattish_styleKeys
+  let prevVals = el._lattish_styleVals
   if (!styleObj || typeof styleObj !== "object") {
+    if (prevKeys) {
+      let pi = 0
+      while (pi < prevKeys.length) {
+        unsetStyleKey(el, prevKeys[pi])
+        pi = pi + 1
+      }
+      el._lattish_styleKeys = null
+      el._lattish_styleVals = null
+    }
     return
   }
+  let nextKeys = []
+  let nextVals = {}
   let keys = Object.keys(styleObj)
   let ki = 0
   while (ki < keys.length) {
     let key = keys[ki]
-    let val = styleObj[key]
-    if (val === null || val === undefined || val === false) {
+    let raw = styleObj[key]
+    if (raw === null || raw === undefined || raw === false) {
       ki = ki + 1
       continue
     }
-    let s = String(val)
-    if (key.indexOf("-") >= 0) {
-      el.style.setProperty(key, s)
-    } else {
-      el.style[key] = s
+    let val = String(raw)
+    nextKeys.push(key)
+    nextVals[key] = val
+    let prevVal = prevVals !== null && prevVals !== undefined ? prevVals[key] : undefined
+    if (prevVal !== val) {
+      writeStyleKey(el, key, val)
     }
     ki = ki + 1
   }
+  if (prevKeys) {
+    let pj = 0
+    while (pj < prevKeys.length) {
+      let oldKey = prevKeys[pj]
+      if (!(oldKey in nextVals)) {
+        unsetStyleKey(el, oldKey)
+      }
+      pj = pj + 1
+    }
+  }
+  el._lattish_styleKeys = nextKeys.length > 0 ? nextKeys : null
+  el._lattish_styleVals = nextKeys.length > 0 ? nextVals : null
+}
+
+// Counterpart for `<el style="...">` strings or when the style prop is
+// removed — clear only what lattish put on the element so imperative
+// writes by the host app keep working.
+export fn clearLattishStyleKeys(el) {
+  let prev = el._lattish_styleKeys
+  if (!prev) {
+    return
+  }
+  let pi = 0
+  while (pi < prev.length) {
+    unsetStyleKey(el, prev[pi])
+    pi = pi + 1
+  }
+  el._lattish_styleKeys = null
 }
