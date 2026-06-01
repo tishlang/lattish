@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lattish": "file:../.."
+    "@tishlang/lattish": "file:../.."
   },
   "devDependencies": {
     "typescript": "^5.0.0",

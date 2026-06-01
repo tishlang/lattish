@@ -12,6 +12,6 @@
     "build:08": "tish build 08-fragment.tish -o dist/08-fragment --target js"
   },
   "dependencies": {
-    "lattish": "^1.0.5"
+    "@tishlang/lattish": "^1.0.5"
   }
 }
