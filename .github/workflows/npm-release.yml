@@ -1,5 +1,17 @@
 # Publish to npm when a GitHub release is promoted from prerelease to full release.
 # Downloads the npm package tarball from the release (no rebuild).
+#
+# AUTH: npm OIDC trusted publishing (no long-lived NPM_TOKEN — npm revoked classic
+# tokens on 2026-12-09 and forces granular tokens to expire, so OIDC is the only
+# durable option). Requires a ONE-TIME setup on npmjs.com for EACH package below;
+# until that is done a publish fails with E404/E422. For both `lattish` and
+# `@tishlang/lattish`, open npmjs.com > the package > Settings > "Trusted Publisher"
+# > GitHub Actions and set:
+#   Organization or user: tishlang
+#   Repository:           lattish
+#   Workflow filename:    npm-release.yml
+#   Environment:          (leave blank)
+# Requires npm >= 11.5.1 (upgraded below) and the id-token: write permission.
 
 name: NPM release
 
@@ -13,9 +25,14 @@ jobs:
     if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # required to update release body via API
+      contents: write   # required to update release body via API
+      id-token: write   # required for npm OIDC trusted publishing
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NODE_AUTH_TOKEN — auth is via OIDC (see trusted-publishing note at top).
+      # Provenance is disabled because the packages publish from pre-built tarballs
+      # (built in a separate workflow, not this run), the fragile case for provenance.
+      # To enable it later, remove this line and confirm the tarball publishes still pass.
+      NPM_CONFIG_PROVENANCE: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +64,11 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm for OIDC trusted publishing (needs >= 11.5.1)
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Publish lattish to npm
         run: npm publish lattish-npm-package.tgz --access public
