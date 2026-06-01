@@ -43,3 +43,5 @@ Requires the [Tish](https://github.com/tishlang/tish) compiler and node_modules 
 
 - [Tish language](https://tishlang.com)
 - [Tish compiler](https://github.com/tishlang/tish)
+- [Lattish docs](https://lattish.com)
+
