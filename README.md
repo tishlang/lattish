@@ -19,7 +19,7 @@ fn App() {
   let [count, setCount] = useState(0)
   return <div>
     <p>{"Count: " + String(count)}</p>
-    <button onclick={() => setCount(count + 1)}>{"Increment"}</button>
+    <button onclick={() => setCount(count + 1)}>Increment</button>
   </div>
 }
 
