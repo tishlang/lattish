@@ -19,7 +19,7 @@ fn App() {
   let [count, setCount] = useState(0)
   return <div>
     <p>{"Count: " + String(count)}</p>
-    <button onclick={() => setCount(count + 1)}>{"Increment"}</button>
+    <button onclick={() => setCount(count + 1)}>Increment</button>
   </div>
 }
 
@@ -43,3 +43,5 @@ Requires the [Tish](https://github.com/tishlang/tish) compiler and node_modules 
 
 - [Tish language](https://tishlang.com)
 - [Tish compiler](https://github.com/tishlang/tish)
+- [Lattish docs](https://lattish.com)
+
