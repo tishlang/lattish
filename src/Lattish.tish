@@ -128,27 +128,133 @@ fn applyMountedProp(el, tag, k, v) {
   el.setAttribute(k, String(v))
 }
 
+// Patch a single prop on an existing element (change-detection + apply).
+fn domPatchProp(el, tag, k, val, prev) {
+  let changed = val !== prev
+  if (k === "dangerouslySetInnerHTML") {
+    let nh = val && typeof val === "object" && val.__html !== undefined && val.__html !== null ? String(val.__html) : ""
+    let ph = prev && typeof prev === "object" && prev.__html !== undefined && prev.__html !== null ? String(prev.__html) : ""
+    changed = nh !== ph
+  }
+  if (!changed) {
+    return
+  }
+  if (k === "dangerouslySetInnerHTML") {
+    let html = ""
+    if (val && typeof val === "object" && val.__html !== undefined && val.__html !== null) {
+      html = String(val.__html)
+    }
+    el.innerHTML = html
+  } else if (k === "class" || k === "className") {
+    setDomClass(el, val || "")
+  } else {
+    if (k.length >= 3 && k[0] === "o" && k[1] === "n") {
+      if (typeof val === "function") {
+        if (!el._lattish_events) el._lattish_events = {}
+        if (!el._lattish_events[k]) {
+          el[domEventKey(k)] = (e) => {
+            let handler = el._lattish_events && el._lattish_events[k]
+            if (handler) runBatched(() => handler(e))
+          }
+        }
+        el._lattish_events[k] = val
+      } else {
+        if (el._lattish_events) el._lattish_events[k] = null
+        el[domEventKey(k)] = null
+      }
+    } else {
+      if (k === "disabled") {
+        el.disabled = !!val
+        if (!val) {
+          el.removeAttribute("disabled")
+        }
+      }
+      if (k === "style") {
+        if (val && typeof val === "object") {
+          applyStyleObject(el, val)
+        } else {
+          clearLattishStyleKeys(el)
+          if (typeof val === "string") {
+            el.setAttribute("style", val)
+          }
+        }
+      }
+      if (k !== "ref" && k !== "disabled" && k !== "style") {
+        if (k === "value" && (tag === "input" || tag === "textarea" || tag === "select")) {
+          if (!skipControlledValueDomWrite(el)) {
+            if (tag === "select") {
+              let vs = String(val)
+              if (el.value !== vs) {
+                el.value = vs
+              }
+            } else {
+              el.value = val
+            }
+          }
+        } else {
+          if (val === false || val === null || val === undefined) {
+            el.removeAttribute(k)
+          } else if (val === true) {
+            el.setAttribute(k, k)
+          } else {
+            el.setAttribute(k, String(val))
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- Host config (react-reconciler style) ---
+//
+// The reconciler routes every node operation through `activeHost`, defaulting to
+// `DomHost` (the DOM). `createRoot(container, host)` lets a custom renderer drive
+// the SAME reconciler + hooks against a non-DOM tree (terminal cells, canvas, …).
+// A host implements: createElement/createText/createComment/createFragment,
+// isText/setText, appendChild/removeChild/replaceChild/replaceChildren,
+// childAt/firstChild, mountProp/patchProp, styleRemoved, setRef.
+let DomHost = {
+  createElement: createHostElement,
+  createText: (v) => document.createTextNode(v),
+  createComment: () => document.createComment(""),
+  createFragment: () => document.createDocumentFragment(),
+  isText: (node) => node.nodeType === 3,
+  setText: (node, value) => { if (node.textContent !== value) { node.textContent = value } },
+  appendChild: (parent, child) => parent.appendChild(child),
+  removeChild: (parent, child) => parent.removeChild(child),
+  replaceChild: (parent, newC, oldC) => parent.replaceChild(newC, oldC),
+  replaceChildren: (parent, nodes) => parent.replaceChildren(...nodes),
+  childAt: (parent, i) => parent.childNodes[i],
+  firstChild: (parent) => parent.firstChild,
+  mountProp: applyMountedProp,
+  patchProp: domPatchProp,
+  styleRemoved: clearLattishStyleKeys,
+  setRef: (refObj, value) => { refObj.current = value }
+}
+
+let activeHost = DomHost
+
 fn mountVnode(v) {
   if (v === null || v === false || v === true) {
-    return document.createComment("")
+    return activeHost.createComment()
   }
   if (typeof v === "string") {
-    return document.createTextNode(v)
+    return activeHost.createText(v)
   }
   if (typeof v === "number") {
-    return document.createTextNode(String(v))
+    return activeHost.createText(String(v))
   }
   if (v && v.tag === Fragment) {
-    let f = document.createDocumentFragment()
+    let f = activeHost.createFragment()
     let ch = flattenChildren(v.children, Fragment)
     let i = 0
     while (i < ch.length) {
-      f.appendChild(mountVnode(ch[i]))
+      activeHost.appendChild(f, mountVnode(ch[i]))
       i = i + 1
     }
     return f
   }
-  let el = createHostElement(v.tag)
+  let el = activeHost.createElement(v.tag)
   let p = v.props || {}
   let keys = Object.keys(p)
   let ki = 0
@@ -159,18 +265,18 @@ fn mountVnode(v) {
     if (k === "ref") {
       refVal = val
     } else {
-      applyMountedProp(el, v.tag, k, val)
+      activeHost.mountProp(el, v.tag, k, val)
     }
     ki = ki + 1
   }
   let ch2 = flattenChildren(v.children, Fragment)
   let ci = 0
   while (ci < ch2.length) {
-    el.appendChild(mountVnode(ch2[ci]))
+    activeHost.appendChild(el, mountVnode(ch2[ci]))
     ci = ci + 1
   }
   if (refVal !== null && refVal !== undefined && typeof refVal === "object") {
-    refVal.current = el
+    activeHost.setRef(refVal, el)
   }
   v._el = el
   return el
@@ -185,10 +291,8 @@ fn patchVnodeEl(el, ov, nv) {
   }
   if (typeof nv === "string" || typeof nv === "number") {
     let s = typeof nv === "string" ? nv : String(nv)
-    if (el.nodeType === 3) {
-      if (el.textContent !== s) {
-        el.textContent = s
-      }
+    if (activeHost.isText(el)) {
+      activeHost.setText(el, s)
     }
     return true
   }
@@ -206,89 +310,11 @@ fn patchVnodeEl(el, ov, nv) {
   let ki = 0
   while (ki < keys.length) {
     let k = keys[ki]
-    let val = p[k]
-    let prev = op[k]
-    let changed = val !== prev
-    if (k === "dangerouslySetInnerHTML") {
-      let nh = val && typeof val === "object" && val.__html !== undefined && val.__html !== null ? String(val.__html) : ""
-      let ph = prev && typeof prev === "object" && prev.__html !== undefined && prev.__html !== null ? String(prev.__html) : ""
-      changed = nh !== ph
-    }
-    if (changed) {
-      if (k === "dangerouslySetInnerHTML") {
-        let html = ""
-        if (val && typeof val === "object" && val.__html !== undefined && val.__html !== null) {
-          html = String(val.__html)
-        }
-        el.innerHTML = html
-      } else if (k === "class" || k === "className") {
-        setDomClass(el, val || "")
-      } else {
-        if (k.length >= 3 && k[0] === "o" && k[1] === "n") {
-          if (typeof val === "function") {
-            if (!el._lattish_events) el._lattish_events = {}
-            if (!el._lattish_events[k]) {
-              el[domEventKey(k)] = (e) => {
-                let handler = el._lattish_events && el._lattish_events[k]
-                if (handler) runBatched(() => handler(e))
-              }
-            }
-            el._lattish_events[k] = val
-          } else {
-            if (el._lattish_events) el._lattish_events[k] = null
-            el[domEventKey(k)] = null
-          }
-        } else {
-          if (k === "ref") {
-            // Mount assigns ref.current; do not mirror as a DOM attribute.
-          }
-          if (k === "disabled") {
-            el.disabled = !!val
-            if (!val) {
-              el.removeAttribute("disabled")
-            }
-          }
-          if (k === "style") {
-            if (val && typeof val === "object") {
-              applyStyleObject(el, val)
-            } else {
-              // String/null/undefined style — clear what lattish wrote, leave
-              // imperative inline styles (transforms from drag code, etc.) intact.
-              clearLattishStyleKeys(el)
-              if (typeof val === "string") {
-                el.setAttribute("style", val)
-              }
-            }
-          }
-          if (k !== "ref" && k !== "disabled" && k !== "style") {
-            if (k === "value" && (nv.tag === "input" || nv.tag === "textarea" || nv.tag === "select")) {
-              if (!skipControlledValueDomWrite(el)) {
-                if (nv.tag === "select") {
-                  let vs = String(val)
-                  if (el.value !== vs) {
-                    el.value = vs
-                  }
-                } else {
-                  el.value = val
-                }
-              }
-            } else {
-              if (val === false || val === null || val === undefined) {
-                el.removeAttribute(k)
-              } else if (val === true) {
-                el.setAttribute(k, k)
-              } else {
-                el.setAttribute(k, String(val))
-              }
-            }
-          }
-        }
-      }
-    }
+    activeHost.patchProp(el, nv.tag, k, p[k], op[k])
     ki = ki + 1
   }
   if (!("style" in p) && op.style !== undefined && op.style !== null) {
-    clearLattishStyleKeys(el)
+    activeHost.styleRemoved(el)
   }
   let ocx = flattenChildren(ov.children, Fragment)
   let ncx = flattenChildren(nv.children, Fragment)
@@ -324,23 +350,23 @@ fn patchVnodeEl(el, ov, nv) {
       nodes.push(mountVnode(ncx[j]))
       j = j + 1
     }
-    el.replaceChildren(...nodes)
+    activeHost.replaceChildren(el, nodes)
     return true
   }
   let i = 0
   while (i < ncx.length) {
     let o = ocx[i]
     let n = ncx[i]
-    let childEl = el.childNodes[i]
+    let childEl = activeHost.childAt(el, i)
     if (n == null) {
       if (childEl) {
-        el.removeChild(childEl)
+        activeHost.removeChild(el, childEl)
       }
       i = i + 1
       continue
     }
     if (o == null) {
-      el.appendChild(mountVnode(n))
+      activeHost.appendChild(el, mountVnode(n))
       i = i + 1
       continue
     }
@@ -350,16 +376,14 @@ fn patchVnodeEl(el, ov, nv) {
     }
     if (typeof n === "string" || typeof n === "number") {
       let ns = typeof n === "string" ? n : String(n)
-      if (childEl && childEl.nodeType === 3) {
-        if (childEl.textContent !== ns) {
-          childEl.textContent = ns
-        }
+      if (childEl && activeHost.isText(childEl)) {
+        activeHost.setText(childEl, ns)
       } else {
         let m = mountVnode(n)
         if (childEl) {
-          el.replaceChild(m, childEl)
+          activeHost.replaceChild(el, m, childEl)
         } else {
-          el.appendChild(m)
+          activeHost.appendChild(el, m)
         }
       }
       i = i + 1
@@ -368,9 +392,9 @@ fn patchVnodeEl(el, ov, nv) {
     if (typeof o === "string" || typeof o === "number" || o.tag !== n.tag) {
       let m = mountVnode(n)
       if (childEl) {
-        el.replaceChild(m, childEl)
+        activeHost.replaceChild(el, m, childEl)
       } else {
-        el.appendChild(m)
+        activeHost.appendChild(el, m)
       }
       i = i + 1
       continue
@@ -378,9 +402,9 @@ fn patchVnodeEl(el, ov, nv) {
     if (!childEl || !patchVnodeEl(childEl, o, n)) {
       let m = mountVnode(n)
       if (childEl) {
-        el.replaceChild(m, childEl)
+        activeHost.replaceChild(el, m, childEl)
       } else {
-        el.appendChild(m)
+        activeHost.appendChild(el, m)
       }
     }
     i = i + 1
@@ -391,27 +415,27 @@ fn patchVnodeEl(el, ov, nv) {
 fn patchRoot(container, oldTree, newTree) {
   try {
     if (oldTree == null) {
-      container.replaceChildren(mountVnode(newTree))
+      activeHost.replaceChildren(container, [mountVnode(newTree)])
       return
     }
-    let el = container.firstChild
+    let el = activeHost.firstChild(container)
     if (!el) {
-      container.appendChild(mountVnode(newTree))
+      activeHost.appendChild(container, mountVnode(newTree))
       return
     }
     if (typeof newTree === "string" || oldTree.tag !== newTree.tag) {
-      container.replaceChildren(mountVnode(newTree))
+      activeHost.replaceChildren(container, [mountVnode(newTree)])
       return
     }
     if (!patchVnodeEl(el, oldTree, newTree)) {
-      container.replaceChildren(mountVnode(newTree))
+      activeHost.replaceChildren(container, [mountVnode(newTree)])
     }
   } catch (err) {
     if (typeof console !== "undefined" && console.warn) {
       console.warn("Lattish patch failed, remount", err)
     }
     try {
-      container.replaceChildren(mountVnode(newTree))
+      activeHost.replaceChildren(container, [mountVnode(newTree)])
     } catch (e2) {
       if (typeof console !== "undefined" && console.error) {
         console.error("Lattish remount failed", e2)
@@ -510,7 +534,7 @@ fn getOrCreateRootEntry(container) {
   if (ix >= 0) {
     return rootList[ix]
   }
-  let entry = { container: container, App: null, vnode: null, scope: null }
+  let entry = { container: container, App: null, vnode: null, scope: null, host: DomHost }
   rootList.push(entry)
   return entry
 }
@@ -748,6 +772,7 @@ fn flushOneRootEntry(entry) {
   if (!entry.container || !entry.App || !entry.scope) {
     return
   }
+  activeHost = entry.host || DomHost
   /* Phase-resolved profiling so the perf HUD can break down a slow
      flush into "rootComponent ran" vs "DOM patch happened". Stored on
      window so probes can read without a runtime export. */
@@ -966,10 +991,15 @@ export fn signal(initial) {
   return s
 }
 
-export fn createRoot(container) {
+// createRoot(container[, host]) — `host` (a host config; see DomHost) lets the same
+// reconciler + hooks render to a non-DOM target. Omit it for the DOM.
+export fn createRoot(container, host) {
+  let theHost = host ? host : DomHost
   fn render(App) {
     let entry = getOrCreateRootEntry(container)
     entry.App = App
+    entry.host = theHost
+    activeHost = theHost
     flushScheduled = false
     batchDepth = 0
     dirtyFromBatch = false

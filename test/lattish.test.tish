@@ -175,6 +175,76 @@ fn testSignalDrivesRender() {
   assert(ctx.container.textContent === "2", "signal write flushes")
 }
 
+// A custom, non-DOM host: builds a plain-object shadow tree. Proves the reconciler
+// + hooks can target a host other than the DOM via createRoot(container, host).
+fn makeShadowHost(log) {
+  fn flatten(parent, child) {
+    if (child && child.fragment) {
+      let k = 0
+      while (k < child.children.length) { parent.children.push(child.children[k]); k = k + 1 }
+    } else {
+      parent.children.push(child)
+    }
+  }
+  return {
+    createElement: (tag) => { log.push("createElement:" + tag); return { tag: tag, props: {}, children: [] } },
+    createText: (value) => { return { text: value } },
+    createComment: () => { return { comment: true } },
+    createFragment: () => { return { fragment: true, children: [] } },
+    isText: (node) => { return node && (typeof node.text === "string") },
+    setText: (node, value) => { node.text = value },
+    appendChild: (parent, child) => { flatten(parent, child) },
+    removeChild: (parent, child) => {
+      let idx = parent.children.indexOf(child)
+      if (idx >= 0) { parent.children.splice(idx, 1) }
+    },
+    replaceChild: (parent, newC, oldC) => {
+      let idx = parent.children.indexOf(oldC)
+      if (idx >= 0) { parent.children[idx] = newC } else { parent.children.push(newC) }
+    },
+    replaceChildren: (parent, nodes) => {
+      parent.children = []
+      let k = 0
+      while (k < nodes.length) { flatten(parent, nodes[k]); k = k + 1 }
+    },
+    childAt: (parent, i) => { return parent.children[i] },
+    firstChild: (parent) => { return parent.children[0] },
+    mountProp: (el, tag, key, value) => { el.props[key] = value },
+    patchProp: (el, tag, key, value, prev) => { el.props[key] = value },
+    styleRemoved: (el) => {},
+    setRef: (refObj, value) => { refObj.current = value }
+  }
+}
+
+fn testCustomHost() {
+  let log = []
+  let host = makeShadowHost(log)
+  let container = { children: [] }
+  let labelSig = signal("hello")
+  let root = createRoot(container, host)
+  root.render(() => h("box", { color: "red" }, [h("label", null, [labelSig()])]))
+
+  let box = container.children[0]
+  assert(box && box.tag === "box", "custom host: box element built")
+  assert(box.props.color === "red", "custom host: prop applied via host")
+  let label = box.children[0]
+  assert(label && label.tag === "label", "custom host: nested element")
+  assert(label.children[0] && label.children[0].text === "hello", "custom host: text node")
+  assert(log.indexOf("createElement:box") !== -1, "custom host: createElement called")
+
+  // reactive update: hooks/reconcile reuse, host patches the text in place
+  runBatched(() => labelSig("world"))
+  let label2 = container.children[0].children[0]
+  assert(label2.children[0].text === "world", "custom host: update patches text via host")
+
+  // a Fragment flattens into the parent through the host
+  let host2 = makeShadowHost([])
+  let c2 = { children: [] }
+  createRoot(c2, host2).render(() => h(Fragment, null, [h("a", null, []), h("b", null, [])]))
+  assert(c2.children.length === 2, "custom host: fragment flattened")
+  assert(c2.children[0].tag === "a" && c2.children[1].tag === "b", "custom host: fragment order")
+}
+
 fn main() {
   testH()
   testFragment()
@@ -185,6 +255,7 @@ fn main() {
   testMemoSkipsBody()
   testMemoPreservesHookCursor()
   testSignalDrivesRender()
+  testCustomHost()
   console.log("Lattish tests passed")
 }
 
