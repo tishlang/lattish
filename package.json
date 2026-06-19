@@ -1,6 +1,7 @@
 {
   "name": "@tishlang/lattish",
-  "version": "0.1.1",
+  "version": "1.4.0",
+  "type": "module",
   "description": "Lattish runtime — hooks + DOM for Tish JSX",
   "license": "PIF",
   "repository": {
@@ -21,7 +22,20 @@
       "import": "./dist/Lattish.js",
       "require": "./dist/Lattish.js",
       "default": "./dist/Lattish.js"
-    }
+    },
+    "./jsx-runtime": {
+      "tish": "./src/jsx-runtime.tish",
+      "import": "./dist/jsx-runtime.js",
+      "require": "./dist/jsx-runtime.js",
+      "default": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "tish": "./src/jsx-dev-runtime.tish",
+      "import": "./dist/jsx-dev-runtime.js",
+      "require": "./dist/jsx-dev-runtime.js",
+      "default": "./dist/jsx-dev-runtime.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src/",
@@ -30,7 +44,7 @@
     "examples/"
   ],
   "scripts": {
-    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && node -e \"require('fs').appendFileSync('dist/Lattish.js', '\\nexport { Fragment, h, text, useLayoutEffect, useEffect, useState, useMemo, useRef, useCallback, createRoot, runBatched, memo, signal, getHookCursor };\\n')\"",
+    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js && node scripts/append-exports.mjs",
     "tishversion": "tish -V",
     "test": "node test/run-tests.mjs",
     "prepack": "npm run build",
@@ -41,7 +55,7 @@
     "@semantic-release/github": "^12.0.6",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.0",
-    "@tishlang/tish": "^2.0.0",
+    "@tishlang/tish": "^2.12.0",
     "jsdom": "^25.0.0",
     "semantic-release": "^25.0.3"
   }

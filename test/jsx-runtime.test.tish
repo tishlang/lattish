@@ -1,0 +1,32 @@
+// jsx-runtime entry tests (vnode factory only — bundled import would duplicate Fragment with Lattish).
+import { jsx, jsxs, jsxDEV, Fragment } from "../src/jsx-runtime.tish"
+
+fn assert(cond, msg) {
+  if (!cond) {
+    throw "Assertion failed: " + msg
+  }
+}
+
+fn main() {
+  let vnode = jsx("span", { class: "auto" }, null)
+  assert(vnode && vnode.tag === "span", "jsx element tag")
+  assert(vnode.props && vnode.props.class === "auto", "jsx element props")
+
+  let keyed = jsx("div", { id: "a" }, "k1")
+  assert(keyed.props && keyed.props.key === "k1", "jsx key arg")
+
+  let frag = jsx(Fragment, { children: ["a", "b"] }, null)
+  assert(frag && frag.tag === Fragment, "jsx fragment tag")
+  assert(frag.children && frag.children.length === 2, "jsx fragment children")
+
+  let multi = jsxs("ul", { children: ["x", "y"] }, null)
+  assert(multi && multi.tag === "ul", "jsxs element")
+  assert(multi.children && multi.children.length === 2, "jsxs children")
+
+  let dev = jsxDEV("p", { children: "dev" }, null, false, null, null)
+  assert(dev && dev.tag === "p", "jsxDEV delegates to jsx")
+
+  console.log("jsx-runtime tests passed")
+}
+
+main()
