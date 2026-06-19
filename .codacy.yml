@@ -1,0 +1,7 @@
+---
+# Exclude test harnesses and build output from static analysis (same policy as tishlang/tish).
+exclude_paths:
+  - 'test/**'
+  - 'dist/**'
+  - '**/*.test.mjs'
+  - '**/*.test.tish'

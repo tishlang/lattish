@@ -7,16 +7,21 @@
  *
  * @param {string} moduleRelId Project-relative `.tish` path (same id passed to
  *   `registerLattishHmrRemount`).
+ * @returns {string}
  */
 export function viteHmrAcceptSnippet(moduleRelId) {
-  return `if (import.meta.hot) {
-  import.meta.hot.accept(() => {
-    if (typeof globalThis.__LATTISH_HMR_ACCEPT__ === "function") {
-      globalThis.__LATTISH_HMR_ACCEPT__(${JSON.stringify(moduleRelId)});
-    }
-  });
-}
-`;
+  const idJson = JSON.stringify(moduleRelId);
+  return (
+    "if (import.meta.hot) {\n" +
+    "  import.meta.hot.accept(() => {\n" +
+    '    if (typeof globalThis.__LATTISH_HMR_ACCEPT__ === "function") {\n' +
+    "      globalThis.__LATTISH_HMR_ACCEPT__(" +
+    idJson +
+    ");\n" +
+    "    }\n" +
+    "  });\n" +
+    "}\n"
+  );
 }
 
 /** Strip the plugin's bare accept boundary so it can be replaced with {@link viteHmrAcceptSnippet}. */

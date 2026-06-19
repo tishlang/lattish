@@ -11,11 +11,30 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { viteHmrAcceptSnippet, VITE_PLUGIN_BARE_ACCEPT_RE } from "../hmr.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const probeFile = path.join(root, "test/fixtures/hmr-probe.tish");
+const fixturesDir = path.resolve(root, "test/fixtures");
+const probeName = "hmr-probe.tish";
 const probeId = "test/fixtures/hmr-probe.tish";
 
+/** Resolve a fixture name to an absolute path confined to test/fixtures. */
+function fixturePath(name) {
+  if (name !== probeName) {
+    throw new Error(`unexpected fixture: ${name}`);
+  }
+  const resolved = path.resolve(fixturesDir, name);
+  if (!resolved.startsWith(`${fixturesDir}${path.sep}`)) {
+    throw new Error(`fixture path outside fixtures dir: ${name}`);
+  }
+  return resolved;
+}
+
+const probeFile = fixturePath(probeName);
+
 function tishPath() {
-  const npm = path.join(root, "node_modules/@tishlang/tish/bin/tish");
+  const npm = path.resolve(root, "node_modules/@tishlang/tish/bin/tish");
+  const allowed = path.resolve(root, "node_modules");
+  if (!npm.startsWith(`${allowed}${path.sep}`)) {
+    return process.env.TISH_PATH || "tish";
+  }
   if (fs.existsSync(npm)) return npm;
   return process.env.TISH_PATH || "tish";
 }
