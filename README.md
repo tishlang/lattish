@@ -10,7 +10,7 @@ npm install lattish
 npm install @tishlang/lattish
 ```
 
-Requires [Tish](https://github.com/tishlang/tish) **2.12+** for per-module ESM (`compile-module` / `@tishlang/vite-plugin-tish`).
+Requires [Tish](https://github.com/tishlang/tish) **2.12+** for per-module ESM + Vite HMR (`@tishlang/vite-plugin-tish`).
 
 ## Usage
 
@@ -39,15 +39,59 @@ import { jsx, jsxs, Fragment } from 'lattish/jsx-runtime'
 // dev: import from 'lattish/jsx-dev-runtime'
 ```
 
-These wrap the same `h` / `Fragment` implementation as the classic factory entry. Set tish's `jsxImportSource` to `lattish` and the compiler emits `import { jsx, jsxs, Fragment } from "lattish/jsx-runtime"` automatically.
+These wrap the same `h` / `Fragment` implementation as the classic factory entry.
+
+## Vite HMR (`@tishlang/vite-plugin-tish`)
+
+Optional — **not** part of the main `lattish` entry. Import `lattish/hmr-runtime` only in Vite dev (or your dev bootstrap):
+
+```javascript
+import {
+  installLattishViteHmrDispatcher,
+  exposeLattishHmrGlobals,
+  registerLattishHmrRemount,
+  saveLattishHmrMountArgs,
+  getLattishHmrMountArgs,
+} from 'lattish/hmr-runtime'
+```
+
+Vite accept snippet (JS only — `.tish` cannot reference `import.meta`):
+
+```javascript
+import { viteHmrAcceptSnippet, VITE_PLUGIN_BARE_ACCEPT_RE } from 'lattish/hmr'
+```
+
+Mount modules register remount handlers and persist mount args so hook state survives module re-evaluation:
+
+```javascript
+const MODULE_ID = "src/MyComponent.tish"
+
+saveLattishHmrMountArgs(MODULE_ID, { host })
+createRoot(host).render(App)
+
+registerLattishHmrRemount(MODULE_ID, () => {
+  let args = getLattishHmrMountArgs(MODULE_ID)
+  if (args) mountAgain(args.host)
+})
+```
+
+`createRoot().render()` on an already-mounted root patches in place and preserves hook state.
+
+| Entry | When to import |
+|-------|----------------|
+| `lattish` | Always — core runtime only |
+| `lattish/hmr-runtime` | Vite dev bootstrap only |
+| `lattish/hmr` | Vite plugin / config only (JS) |
 
 ## Exports
 
 | Entry | Exports |
 |-------|---------|
-| `lattish` | `h`, `Fragment`, `createRoot`, hooks |
+| `lattish` | `h`, `Fragment`, `createRoot`, hooks, `refreshAllRoots` |
+| `lattish/hmr-runtime` | Vite HMR remount registry (optional) |
 | `lattish/jsx-runtime` | `jsx`, `jsxs`, `jsxDEV`, `Fragment` |
 | `lattish/jsx-dev-runtime` | same as jsx-runtime (dev entry) |
+| `lattish/hmr` | `viteHmrAcceptSnippet`, `VITE_PLUGIN_BARE_ACCEPT_RE` (Vite plugin JS) |
 
 ## Examples
 

@@ -35,28 +35,45 @@
       "require": "./dist/jsx-dev-runtime.js",
       "default": "./dist/jsx-dev-runtime.js"
     },
+    "./hmr-runtime": {
+      "tish": "./src/lattishHmr.tish",
+      "import": "./dist/lattishHmr.js",
+      "require": "./dist/lattishHmr.js",
+      "default": "./dist/lattishHmr.js"
+    },
+    "./hmr": {
+      "import": "./hmr.cjs",
+      "require": "./hmr.cjs",
+      "default": "./hmr.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "src/",
     "dist/",
+    "hmr.cjs",
     "README.md",
     "examples/"
   ],
   "scripts": {
-    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js && node scripts/append-exports.mjs",
+    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/lattishHmr.tish -o dist/lattishHmr.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js && node scripts/append-exports.mjs",
     "tishversion": "tish -V",
-    "test": "node test/run-tests.mjs",
+    "test": "node test/run-tests.mjs && node test/hmr-vite.test.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/github": "^12.0.6",
-    "@semantic-release/npm": "^13.1.5",
-    "@semantic-release/release-notes-generator": "^14.1.0",
-    "@tishlang/tish": "^2.12.0",
-    "jsdom": "^25.0.0",
-    "semantic-release": "^25.0.3"
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/github": "12.0.6",
+    "@semantic-release/npm": "13.1.5",
+    "@semantic-release/release-notes-generator": "14.1.0",
+    "@tishlang/tish": "2.12.0",
+    "@tishlang/vite-plugin-tish": "0.1.0",
+    "jsdom": "25.0.1",
+    "semantic-release": "25.0.3",
+    "vite": "6.4.3"
   }
 }

@@ -2,7 +2,7 @@
 // Requires DOM (jsdom). Tests h(), Fragment, useState, useRef, createRoot.
 // h() returns vnodes; DOM is produced by createRoot / patchRoot.
 
-import { h, Fragment, useState, useRef, createRoot, memo, signal, runBatched } from "../src/Lattish.tish"
+import { h, Fragment, useState, useRef, createRoot, memo, signal, runBatched, refreshAllRoots } from "../src/Lattish.tish"
 
 fn assert(cond, msg) {
   if (!cond) {
@@ -216,6 +216,36 @@ fn makeShadowHost(log) {
   }
 }
 
+fn testRemountPreservesHookState() {
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  root.render(() => {
+    let [n, setN] = useState(7)
+    return h("div", null, [String(n)])
+  })
+  assert(ctx.container.textContent === "7", "remount: initial render")
+  root.render(() => {
+    let [n, setN] = useState(0)
+    return h("div", null, [String(n)])
+  })
+  assert(ctx.container.textContent === "7", "remount: useState preserved on second render")
+}
+
+fn testRefreshAllRoots() {
+  let ctx = { container: document.createElement("div") }
+  let root = createRoot(ctx.container)
+  let bump = null
+  root.render(() => {
+    let [n, setN] = useState(1)
+    bump = () => { setN(n + 1) }
+    return h("div", null, [String(n)])
+  })
+  assert(ctx.container.textContent === "1", "refreshAllRoots: initial")
+  bump()
+  refreshAllRoots()
+  assert(ctx.container.textContent === "2", "refreshAllRoots: flushed state update")
+}
+
 fn testCustomHost() {
   let log = []
   let host = makeShadowHost(log)
@@ -255,6 +285,8 @@ fn main() {
   testMemoSkipsBody()
   testMemoPreservesHookCursor()
   testSignalDrivesRender()
+  testRemountPreservesHookState()
+  testRefreshAllRoots()
   testCustomHost()
   console.log("Lattish tests passed")
 }

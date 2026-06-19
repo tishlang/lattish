@@ -24,6 +24,18 @@ const bundles = [
       "memo",
       "signal",
       "getHookCursor",
+      "refreshAllRoots",
+    ],
+  },
+  {
+    file: "dist/lattishHmr.js",
+    names: [
+      "saveLattishHmrMountArgs",
+      "getLattishHmrMountArgs",
+      "registerLattishHmrRemount",
+      "runLattishHmrRemountForModule",
+      "installLattishViteHmrDispatcher",
+      "exposeLattishHmrGlobals",
     ],
   },
   { file: "dist/jsx-runtime.js", names: ["jsx", "jsxs", "jsxDEV", "Fragment"] },

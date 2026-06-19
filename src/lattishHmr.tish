@@ -1,0 +1,97 @@
+// Optional Vite HMR remount registry — import from `lattish/hmr-runtime`, not the main entry.
+// Pair with `lattish/hmr` (Vite accept snippet) and call installLattishViteHmrDispatcher()
+// once in dev before loading mount modules.
+
+import { refreshAllRoots } from "./Lattish.tish"
+
+fn lattishHmrState() {
+  let g = (typeof globalThis !== "undefined") ? globalThis : null
+  if (!g) {
+    return null
+  }
+  if (!g.__LATTISH_HMR__) {
+    g.__LATTISH_HMR__ = { mountArgs: {}, remounts: {} }
+  }
+  return g.__LATTISH_HMR__
+}
+
+export fn saveLattishHmrMountArgs(moduleId, args) {
+  let st = lattishHmrState()
+  if (st) {
+    st.mountArgs[moduleId] = args
+  }
+}
+
+export fn getLattishHmrMountArgs(moduleId) {
+  let st = lattishHmrState()
+  if (!st) {
+    return null
+  }
+  if (moduleId in st.mountArgs) {
+    return st.mountArgs[moduleId]
+  }
+  return null
+}
+
+export fn runLattishHmrRemountForModule(moduleId) {
+  let st = lattishHmrState()
+  if (!st) {
+    refreshAllRoots()
+    return
+  }
+  if (moduleId in st.remounts) {
+    let remount = st.remounts[moduleId]
+    if (typeof remount === "function") {
+      remount()
+      return
+    }
+  }
+  let prefix = moduleId + "#"
+  let keys = Object.keys(st.remounts)
+  let i = 0
+  let ran = false
+  while (i < keys.length) {
+    let key = keys[i]
+    if (key.length > prefix.length && key.startsWith(prefix)) {
+      let remount = st.remounts[key]
+      if (typeof remount === "function") {
+        remount()
+        ran = true
+      }
+    }
+    i = i + 1
+  }
+  if (ran) {
+    return
+  }
+  refreshAllRoots()
+}
+
+export fn registerLattishHmrRemount(moduleId, remountFn) {
+  let st = lattishHmrState()
+  if (st) {
+    st.remounts[moduleId] = remountFn
+  }
+}
+
+export fn installLattishViteHmrDispatcher() {
+  let g = (typeof globalThis !== "undefined") ? globalThis : null
+  if (!g || g.__LATTISH_HMR_ACCEPT__) {
+    return
+  }
+  g.__LATTISH_HMR_ACCEPT__ = (moduleId) => {
+    runLattishHmrRemountForModule(moduleId)
+  }
+}
+
+// Bridge for apps that keep mount modules free of a direct hmr-runtime import (no-op stubs
+// call these globals only when __LATTISH_HMR_ACTIVE__ is set in Vite dev).
+export fn exposeLattishHmrGlobals() {
+  let g = (typeof globalThis !== "undefined") ? globalThis : null
+  if (!g) {
+    return
+  }
+  g.__LATTISH_HMR_REGISTER__ = registerLattishHmrRemount
+  g.__LATTISH_HMR_SAVE_ARGS__ = saveLattishHmrMountArgs
+  g.__LATTISH_HMR_GET_ARGS__ = getLattishHmrMountArgs
+}
