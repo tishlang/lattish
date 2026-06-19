@@ -1,6 +1,6 @@
 # Lattish
 
-Lattish runtime for Tish JSX — hooks + DOM helpers for compiled Tish apps.
+Lattish runtime for Tish JSX — hooks + DOM helpers for Tish apps.
 
 ## Install
 
