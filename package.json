@@ -42,16 +42,16 @@
       "default": "./dist/lattishHmr.js"
     },
     "./hmr": {
-      "import": "./hmr.js",
-      "require": "./hmr.js",
-      "default": "./hmr.js"
+      "import": "./hmr.cjs",
+      "require": "./hmr.cjs",
+      "default": "./hmr.cjs"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "src/",
     "dist/",
-    "hmr.js",
+    "hmr.cjs",
     "README.md",
     "examples/"
   ],

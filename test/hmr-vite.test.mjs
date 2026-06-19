@@ -8,7 +8,7 @@ import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { viteHmrAcceptSnippet, VITE_PLUGIN_BARE_ACCEPT_RE } from "../hmr.js";
+import { viteHmrAcceptSnippet, VITE_PLUGIN_BARE_ACCEPT_RE } from "../hmr.cjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixturesDir = path.resolve(root, "test/fixtures");

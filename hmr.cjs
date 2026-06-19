@@ -1,3 +1,22 @@
+"use strict";
+
+/**
+ * Escape a string as a JSON string literal without using the JSON global.
+ * @param {string} value
+ * @returns {string}
+ */
+function jsonString(value) {
+  return (
+    '"' +
+    value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r") +
+    '"'
+  );
+}
+
 /**
  * Vite HMR accept snippet for Lattish mount modules.
  *
@@ -9,8 +28,11 @@
  *   `registerLattishHmrRemount`).
  * @returns {string}
  */
-export function viteHmrAcceptSnippet(moduleRelId) {
-  const idJson = JSON.stringify(moduleRelId);
+function viteHmrAcceptSnippet(moduleRelId) {
+  if (typeof moduleRelId !== "string") {
+    throw new TypeError("moduleRelId must be a string");
+  }
+  var idJson = jsonString(moduleRelId);
   return (
     "if (import.meta.hot) {\n" +
     "  import.meta.hot.accept(() => {\n" +
@@ -24,6 +46,11 @@ export function viteHmrAcceptSnippet(moduleRelId) {
   );
 }
 
-/** Strip the plugin's bare accept boundary so it can be replaced with {@link viteHmrAcceptSnippet}. */
-export const VITE_PLUGIN_BARE_ACCEPT_RE =
+/** Strip the plugin's bare accept boundary so it can be replaced with viteHmrAcceptSnippet. */
+var VITE_PLUGIN_BARE_ACCEPT_RE =
   /\nif \(import\.meta\.hot\) \{ import\.meta\.hot\.accept\(\); \}\n?$/;
+
+module.exports = {
+  viteHmrAcceptSnippet: viteHmrAcceptSnippet,
+  VITE_PLUGIN_BARE_ACCEPT_RE: VITE_PLUGIN_BARE_ACCEPT_RE,
+};
