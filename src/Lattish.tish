@@ -991,6 +991,11 @@ export fn signal(initial) {
   return s
 }
 
+// Re-run every mounted root (e.g. after a reactive signal or devtools probe).
+export fn refreshAllRoots() {
+  flushRender()
+}
+
 // createRoot(container[, host]) — `host` (a host config; see DomHost) lets the same
 // reconciler + hooks render to a non-DOM target. Omit it for the DOM.
 export fn createRoot(container, host) {
@@ -1000,6 +1005,13 @@ export fn createRoot(container, host) {
     entry.App = App
     entry.host = theHost
     activeHost = theHost
+
+    // Hot update: keep hook scope + vnode, patch DOM in place.
+    if (entry.scope !== null && entry.vnode !== null) {
+      flushOneRootEntry(entry)
+      return
+    }
+
     flushScheduled = false
     batchDepth = 0
     dirtyFromBatch = false

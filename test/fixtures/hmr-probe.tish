@@ -1,0 +1,27 @@
+// Headless HMR probe for test/hmr-vite.test.mjs
+import { createRoot, useState, h } from "lattish"
+import {
+  registerLattishHmrRemount,
+  saveLattishHmrMountArgs,
+  getLattishHmrMountArgs
+} from "../../src/lattishHmr.tish"
+
+const LATTISH_HMR_ID = "test/fixtures/hmr-probe.tish"
+
+export let probeLabel = "alpha"
+
+export fn mountProbe(host) {
+  saveLattishHmrMountArgs(LATTISH_HMR_ID, { host: host })
+  fn App() {
+    let [n, setN] = useState(42)
+    return h("div", { id: "probe-root" }, [probeLabel + ":" + String(n)])
+  }
+  createRoot(host).render(App)
+}
+
+registerLattishHmrRemount(LATTISH_HMR_ID, () => {
+  let args = getLattishHmrMountArgs(LATTISH_HMR_ID)
+  if (args) {
+    mountProbe(args.host)
+  }
+})
