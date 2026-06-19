@@ -1,0 +1,59 @@
+// Automatic JSX runtime entry for tish's modern `jsx` / `jsxs` / `jsxDEV` lowering shape.
+// Classic `h` / `Fragment` remain on the package root for legacy and tish 2.12 auto-import.
+
+import { h, Fragment } from "./Lattish.tish"
+
+fn omitKey(obj, key) {
+  let out = {}
+  let keys = Object.keys(obj)
+  let i = 0
+  while (i < keys.length) {
+    let k = keys[i]
+    if (k !== key) {
+      out[k] = obj[k]
+    }
+    i = i + 1
+  }
+  return out
+}
+
+fn propsForH(props, key) {
+  let p = props ? props : {}
+  if (key === undefined || key === null) {
+    return p
+  }
+  let out = omitKey(p, "key")
+  out.key = key
+  return out
+}
+
+fn childrenFromProps(props) {
+  if (!props || !("children" in props)) {
+    return { props: props ? props : {}, children: [] }
+  }
+  let raw = props.children
+  let rest = omitKey(props, "children")
+  if (raw === undefined || raw === null) {
+    return { props: rest, children: [] }
+  }
+  if (Array.isArray(raw)) {
+    return { props: rest, children: raw }
+  }
+  return { props: rest, children: [raw] }
+}
+
+// React-compatible automatic runtime: props may carry `children`; `key` is the third arg.
+export fn jsx(type, props, key) {
+  let p = propsForH(props, key)
+  let split = childrenFromProps(p)
+  return h(type, split.props, split.children)
+}
+
+// Static multi-child JSX uses the same vnode shape as `jsx` for Lattish.
+export fn jsxs(type, props, key) {
+  return jsx(type, props, key)
+}
+
+export fn jsxDEV(type, props, key, isStaticChildren, source, self) {
+  return jsx(type, props, key)
+}

@@ -1,0 +1,19 @@
+// Dev automatic JSX runtime — same implementation as production for Lattish.
+import {
+  jsx as jsxProd,
+  jsxs as jsxsProd,
+  jsxDEV as jsxDEVProd,
+  Fragment
+} from "./jsx-runtime.tish"
+
+export fn jsx(type, props, key) {
+  return jsxProd(type, props, key)
+}
+
+export fn jsxs(type, props, key) {
+  return jsxsProd(type, props, key)
+}
+
+export fn jsxDEV(type, props, key, isStaticChildren, source, self) {
+  return jsxDEVProd(type, props, key, isStaticChildren, source, self)
+}

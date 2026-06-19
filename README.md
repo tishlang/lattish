@@ -10,6 +10,8 @@ npm install lattish
 npm install @tishlang/lattish
 ```
 
+Requires [Tish](https://github.com/tishlang/tish) **2.12+** for per-module ESM (`compile-module` / `@tishlang/vite-plugin-tish`).
+
 ## Usage
 
 ```javascript
@@ -26,13 +28,26 @@ fn App() {
 createRoot(document.getElementById("root")).render(App)
 ```
 
-Requires the [Tish](https://github.com/tishlang/tish) compiler and node_modules resolution for bare specifiers. JSX is built in: `tish build --target js` always lowers JSX to calls that Lattish provides — no extra flag.
+With **tish 2.12+** and `--format esm` / `compile-module`, JSX modules get `h` / `Fragment` auto-imported from `lattish` when missing — you do not need to import them by hand.
+
+### Automatic JSX runtime (`jsx` / `jsxs`)
+
+For compilers that emit the modern automatic-runtime shape ([tishlang/tish#291](https://github.com/tishlang/tish/issues/291)):
+
+```javascript
+import { jsx, jsxs, Fragment } from 'lattish/jsx-runtime'
+// dev: import from 'lattish/jsx-dev-runtime'
+```
+
+These wrap the same `h` / `Fragment` implementation as the classic factory entry. Set tish's `jsxImportSource` to `lattish` and the compiler emits `import { jsx, jsxs, Fragment } from "lattish/jsx-runtime"` automatically.
 
 ## Exports
 
-- `h`, `Fragment`, `text` — DOM runtime for compiled JSX
-- `createRoot` — mount and re-render
-- `useState`, `useRef`, `useMemo`, `useEffect`, `useLayoutEffect` — hooks (DOM event handlers batch updates automatically)
+| Entry | Exports |
+|-------|---------|
+| `lattish` | `h`, `Fragment`, `createRoot`, hooks |
+| `lattish/jsx-runtime` | `jsx`, `jsxs`, `jsxDEV`, `Fragment` |
+| `lattish/jsx-dev-runtime` | same as jsx-runtime (dev entry) |
 
 ## Examples
 
@@ -44,4 +59,3 @@ Requires the [Tish](https://github.com/tishlang/tish) compiler and node_modules 
 - [Tish language](https://tishlang.com)
 - [Tish compiler](https://github.com/tishlang/tish)
 - [Lattish docs](https://lattish.com)
-
