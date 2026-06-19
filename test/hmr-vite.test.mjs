@@ -5,6 +5,7 @@
 import { createServer } from "vite";
 import tishPlugin from "@tishlang/vite-plugin-tish";
 import { JSDOM } from "jsdom";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -28,6 +29,27 @@ function fixturePath(name) {
 }
 
 const probeFile = fixturePath(probeName);
+
+/** Compile hmr-runtime for this test (same pattern as test/run-tests.mjs — no pre-build required). */
+function compileHmrRuntime() {
+  const outBase = path.join(root, "dist/lattishHmr");
+  const outJs = `${outBase}.js`;
+  const src = path.join(root, "src/lattishHmr.tish");
+  const tish = spawnSync(
+    "npx",
+    ["--no-install", "@tishlang/tish", "build", src, "-o", outBase, "--target", "js"],
+    { cwd: root, encoding: "utf8" },
+  );
+  if (tish.status !== 0) {
+    console.error("Compile failed (src/lattishHmr.tish):", tish.stderr || tish.stdout);
+    process.exit(1);
+  }
+  fs.appendFileSync(
+    outJs,
+    "\nexport { saveLattishHmrMountArgs, getLattishHmrMountArgs, registerLattishHmrRemount, runLattishHmrRemountForModule, installLattishViteHmrDispatcher, exposeLattishHmrGlobals };\n",
+  );
+  return outJs;
+}
 
 function tishPath() {
   const npm = path.resolve(root, "node_modules/@tishlang/tish/bin/tish");
@@ -76,7 +98,7 @@ function withLattishHmrAccept(basePlugin, projectRoot) {
 setupJsdom();
 
 globalThis.__LATTISH_HMR_ACTIVE__ = true;
-const hmrRuntime = await import(pathToFileURL(path.join(root, "dist/lattishHmr.js")).href);
+const hmrRuntime = await import(pathToFileURL(compileHmrRuntime()).href);
 hmrRuntime.installLattishViteHmrDispatcher();
 hmrRuntime.exposeLattishHmrGlobals();
 
