@@ -306,7 +306,7 @@ fn patchVnodeEl(el, ov, nv) {
         if (typeof o === "string" || typeof o === "number") {
           fullCh = true
         } else {
-          if (o == null || n == null || o.tag !== n.tag) {
+          if (o === null || n === null || o.tag !== n.tag) {
             fullCh = true
           }
         }
@@ -332,14 +332,14 @@ fn patchVnodeEl(el, ov, nv) {
     let o = ocx[i]
     let n = ncx[i]
     let childEl = el.childNodes[i]
-    if (n == null) {
+    if (n === null) {
       if (childEl) {
         el.removeChild(childEl)
       }
       i = i + 1
       continue
     }
-    if (o == null) {
+    if (o === null) {
       el.appendChild(mountVnode(n))
       i = i + 1
       continue
@@ -390,7 +390,7 @@ fn patchVnodeEl(el, ov, nv) {
 
 fn patchRoot(container, oldTree, newTree) {
   try {
-    if (oldTree == null) {
+    if (oldTree === null) {
       container.replaceChildren(mountVnode(newTree))
       return
     }
