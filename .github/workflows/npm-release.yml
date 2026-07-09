@@ -62,12 +62,22 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Upgrade npm for OIDC trusted publishing (needs >= 11.5.1)
         run: |
-          npm install -g npm@latest
+          # Pinned to the 11.x line, NOT `npm@latest` / 12.x. npm 12.0.0 (2026-07-09) is
+          # independently broken for publishing regardless of Node version: its own
+          # package.json lists `sigstore` in bundleDependencies, but the published tarball
+          # omits it, and libnpmpublish's publish path requires it unconditionally at module
+          # load (even with NPM_CONFIG_PROVENANCE=false, which this workflow already sets) —
+          # every `npm publish` crashes with `Cannot find module 'sigstore'`. Confirmed via
+          # local reproduction in tishlang/tish (see tishlang/tish#480). npm 11.18.0 (latest
+          # 11.x) has sigstore bundled correctly, publishes cleanly, and still satisfies the
+          # >=11.5.1 OIDC trusted-publishing requirement above. Revisit floating to `@latest`
+          # once upstream ships a patched 12.0.x.
+          npm install -g "npm@^11"
           npm --version
 
       - name: Publish lattish to npm
