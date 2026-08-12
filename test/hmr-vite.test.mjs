@@ -6,6 +6,7 @@ import { createServer } from "vite";
 import tishPlugin from "@tishlang/vite-plugin-tish";
 import { JSDOM } from "jsdom";
 import { spawnSync } from "node:child_process";
+import { appendMissingExports } from "../scripts/append-exports.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -45,28 +46,16 @@ function compileHmrRuntime() {
     process.exit(1);
   }
   // `tish build --target js` did not emit export lines up to 2.12; from 3.7 it does. Appending
-  // unconditionally yields `SyntaxError: Duplicate export of '<name>'` and the module fails to
-  // load, so only append what the emitted output is actually missing.
-  const names = [
+  // unconditionally yields `SyntaxError: Duplicate export of '<name>'`, so append only what is
+  // missing — sharing the build script's helper rather than keeping a second copy of the logic.
+  appendMissingExports("dist/lattishHmr.js", [
     "saveLattishHmrMountArgs",
     "getLattishHmrMountArgs",
     "registerLattishHmrRemount",
     "runLattishHmrRemountForModule",
     "installLattishViteHmrDispatcher",
     "exposeLattishHmrGlobals",
-  ];
-  const emitted = fs.readFileSync(outJs, "utf8");
-  const have = new Set();
-  for (const m of emitted.matchAll(/^export\s*\{([^}]*)\}/gm)) {
-    for (const part of m[1].split(",")) {
-      const name = part.trim().split(/\s+as\s+/).pop().trim();
-      if (name) have.add(name);
-    }
-  }
-  const missing = names.filter((n) => !have.has(n));
-  if (missing.length > 0) {
-    fs.appendFileSync(outJs, `\nexport { ${missing.join(", ")} };\n`);
-  }
+  ]);
   return outJs;
 }
 
