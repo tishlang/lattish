@@ -65,7 +65,7 @@
     "examples/"
   ],
   "scripts": {
-    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/lattishHmr.tish -o dist/lattishHmr.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js && node scripts/append-exports.mjs",
+    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/lattishHmr.tish -o dist/lattishHmr.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js",
     "tishversion": "tish -V",
     "test": "npm run test:dom && npm run test:hmr",
     "prepack": "npm run build",
