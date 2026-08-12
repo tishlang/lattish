@@ -12,7 +12,12 @@
     "access": "public"
   },
   "tish": {
-    "module": "./src/Lattish.tish"
+    "module": "./src/Lattish.tish",
+    "test": {
+      "root": [
+        "test"
+      ]
+    }
   },
   "main": "./dist/Lattish.js",
   "module": "./dist/Lattish.js",
@@ -46,6 +51,10 @@
       "require": "./hmr.cjs",
       "default": "./hmr.cjs"
     },
+    "./adapters/rn": {
+      "tish": "./src/adapters/rn.tish",
+      "default": "./src/adapters/rn.tish"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -56,11 +65,14 @@
     "examples/"
   ],
   "scripts": {
-    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/lattishHmr.tish -o dist/lattishHmr.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js && node scripts/append-exports.mjs",
+    "build": "tish build src/Lattish.tish -o dist/Lattish.js --target js && tish build src/lattishHmr.tish -o dist/lattishHmr.js --target js && tish build src/jsx-runtime.tish -o dist/jsx-runtime.js --target js && tish build src/jsx-dev-runtime.tish -o dist/jsx-dev-runtime.js --target js",
     "tishversion": "tish -V",
-    "test": "node test/run-tests.mjs && node test/hmr-vite.test.mjs",
+    "test": "npm run test:dom && npm run test:hmr",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:tish": "tish test test/jsx-runtime.test.tish",
+    "test:dom": "node test/run-tests.mjs",
+    "test:hmr": "node test/hmr-vite.test.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -70,7 +82,7 @@
     "@semantic-release/github": "12.0.6",
     "@semantic-release/npm": "13.1.5",
     "@semantic-release/release-notes-generator": "14.1.0",
-    "@tishlang/tish": "2.12.0",
+    "@tishlang/tish": "3.7.1",
     "@tishlang/vite-plugin-tish": "0.1.0",
     "jsdom": "25.0.1",
     "semantic-release": "25.0.3",

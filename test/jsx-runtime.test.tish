@@ -1,32 +1,34 @@
-// jsx-runtime entry tests (vnode factory only — bundled import would duplicate Fragment with Lattish).
+// jsx-runtime entry tests (vnode factory only — no DOM).
+// Language-semantics suite for `tish test` (VM/interp). DomHost suites stay on
+// `node test/run-tests.mjs` (JS emit + jsdom).
+import { test } from "tish:test"
+import assert from "node:assert/strict"
 import { jsx, jsxs, jsxDEV, Fragment } from "../src/jsx-runtime.tish"
 
-fn assert(cond, msg) {
-  if (!cond) {
-    throw "Assertion failed: " + msg
-  }
-}
-
-fn main() {
+test("jsx element tag + props", () => {
   let vnode = jsx("span", { class: "auto" }, null)
-  assert(vnode && vnode.tag === "span", "jsx element tag")
-  assert(vnode.props && vnode.props.class === "auto", "jsx element props")
+  assert.ok(vnode && vnode.tag === "span", "jsx element tag")
+  assert.ok(vnode.props && vnode.props.class === "auto", "jsx element props")
+})
 
+test("jsx key arg", () => {
   let keyed = jsx("div", { id: "a" }, "k1")
-  assert(keyed.props && keyed.props.key === "k1", "jsx key arg")
+  assert.ok(keyed.props && keyed.props.key === "k1", "jsx key arg")
+})
 
+test("jsx fragment", () => {
   let frag = jsx(Fragment, { children: ["a", "b"] }, null)
-  assert(frag && frag.tag === Fragment, "jsx fragment tag")
-  assert(frag.children && frag.children.length === 2, "jsx fragment children")
+  assert.ok(frag && frag.tag === Fragment, "jsx fragment tag")
+  assert.ok(frag.children && frag.children.length === 2, "jsx fragment children")
+})
 
+test("jsxs element + children", () => {
   let multi = jsxs("ul", { children: ["x", "y"] }, null)
-  assert(multi && multi.tag === "ul", "jsxs element")
-  assert(multi.children && multi.children.length === 2, "jsxs children")
+  assert.ok(multi && multi.tag === "ul", "jsxs element")
+  assert.ok(multi.children && multi.children.length === 2, "jsxs children")
+})
 
+test("jsxDEV delegates to jsx", () => {
   let dev = jsxDEV("p", { children: "dev" }, null, false, null, null)
-  assert(dev && dev.tag === "p", "jsxDEV delegates to jsx")
-
-  console.log("jsx-runtime tests passed")
-}
-
-main()
+  assert.ok(dev && dev.tag === "p", "jsxDEV delegates to jsx")
+})

@@ -44,10 +44,7 @@ function compileHmrRuntime() {
     console.error("Compile failed (src/lattishHmr.tish):", tish.stderr || tish.stdout);
     process.exit(1);
   }
-  fs.appendFileSync(
-    outJs,
-    "\nexport { saveLattishHmrMountArgs, getLattishHmrMountArgs, registerLattishHmrRemount, runLattishHmrRemountForModule, installLattishViteHmrDispatcher, exposeLattishHmrGlobals };\n",
-  );
+  // tish emits the module's exports itself; nothing to append.
   return outJs;
 }
 
