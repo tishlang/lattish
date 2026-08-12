@@ -45,15 +45,20 @@ function runCompiled(path) {
 
 setupJsdom();
 
+// JS-emit + jsdom suites (DomHost reconciler + jsx-runtime vnode factory).
+// Native `tish test` for jsx-runtime is prepared (test/jsx-runtime.test.tish) but blocked
+// on the VM until Lattish.tish stops using JS `undefined`.
 const testFiles = [
-  { src: "test/lattish.test.tish", out: "dist/lattish-test" },
-  { src: "test/jsx-runtime.test.tish", out: "dist/jsx-runtime-test" },
+  { src: "test/lattish.jsemit.tish", out: "dist/lattish-test" },
+  { src: "test/jsx-runtime.jsemit.tish", out: "dist/jsx-runtime-test" },
 ];
 
 for (const { src, out } of testFiles) {
   const tish = spawnSync(
-    "npx",
-    ["--no-install", "@tishlang/tish", "build", src, "-o", out, "--target", "js"],
+    process.env.TISH_BIN || "npx",
+    process.env.TISH_BIN
+      ? ["build", src, "-o", out, "--target", "js"]
+      : ["--no-install", "@tishlang/tish", "build", src, "-o", out, "--target", "js"],
     { cwd: root, encoding: "utf8" },
   );
   if (tish.status !== 0) {

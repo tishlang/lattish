@@ -44,10 +44,29 @@ function compileHmrRuntime() {
     console.error("Compile failed (src/lattishHmr.tish):", tish.stderr || tish.stdout);
     process.exit(1);
   }
-  fs.appendFileSync(
-    outJs,
-    "\nexport { saveLattishHmrMountArgs, getLattishHmrMountArgs, registerLattishHmrRemount, runLattishHmrRemountForModule, installLattishViteHmrDispatcher, exposeLattishHmrGlobals };\n",
-  );
+  // `tish build --target js` did not emit export lines up to 2.12; from 3.7 it does. Appending
+  // unconditionally yields `SyntaxError: Duplicate export of '<name>'` and the module fails to
+  // load, so only append what the emitted output is actually missing.
+  const names = [
+    "saveLattishHmrMountArgs",
+    "getLattishHmrMountArgs",
+    "registerLattishHmrRemount",
+    "runLattishHmrRemountForModule",
+    "installLattishViteHmrDispatcher",
+    "exposeLattishHmrGlobals",
+  ];
+  const emitted = fs.readFileSync(outJs, "utf8");
+  const have = new Set();
+  for (const m of emitted.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+    for (const part of m[1].split(",")) {
+      const name = part.trim().split(/\s+as\s+/).pop().trim();
+      if (name) have.add(name);
+    }
+  }
+  const missing = names.filter((n) => !have.has(n));
+  if (missing.length > 0) {
+    fs.appendFileSync(outJs, `\nexport { ${missing.join(", ")} };\n`);
+  }
   return outJs;
 }
 

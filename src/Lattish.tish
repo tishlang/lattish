@@ -96,7 +96,7 @@ fn applyMountedProp(el, tag, k, v) {
     el.setAttribute(k, k)
     return
   }
-  if (v === false || v === null || v === undefined) {
+  if (v === false || v === null) {
     return
   }
   if (k === "class" || k === "className") {
@@ -114,7 +114,7 @@ fn applyMountedProp(el, tag, k, v) {
     return
   }
   if (k === "dangerouslySetInnerHTML") {
-    if (v && typeof v === "object" && v.__html !== undefined && v.__html !== null) {
+    if (v && typeof v === "object" && v.__html !== null) {
       el.innerHTML = String(v.__html)
     } else {
       el.innerHTML = ""
@@ -132,8 +132,8 @@ fn applyMountedProp(el, tag, k, v) {
 fn domPatchProp(el, tag, k, val, prev) {
   let changed = val !== prev
   if (k === "dangerouslySetInnerHTML") {
-    let nh = val && typeof val === "object" && val.__html !== undefined && val.__html !== null ? String(val.__html) : ""
-    let ph = prev && typeof prev === "object" && prev.__html !== undefined && prev.__html !== null ? String(prev.__html) : ""
+    let nh = val && typeof val === "object" && val.__html !== null ? String(val.__html) : ""
+    let ph = prev && typeof prev === "object" && prev.__html !== null ? String(prev.__html) : ""
     changed = nh !== ph
   }
   if (!changed) {
@@ -141,7 +141,7 @@ fn domPatchProp(el, tag, k, val, prev) {
   }
   if (k === "dangerouslySetInnerHTML") {
     let html = ""
-    if (val && typeof val === "object" && val.__html !== undefined && val.__html !== null) {
+    if (val && typeof val === "object" && val.__html !== null) {
       html = String(val.__html)
     }
     el.innerHTML = html
@@ -192,7 +192,7 @@ fn domPatchProp(el, tag, k, val, prev) {
             }
           }
         } else {
-          if (val === false || val === null || val === undefined) {
+          if (val === false || val === null) {
             el.removeAttribute(k)
           } else if (val === true) {
             el.setAttribute(k, k)
@@ -275,7 +275,7 @@ fn mountVnode(v) {
     activeHost.appendChild(el, mountVnode(ch2[ci]))
     ci = ci + 1
   }
-  if (refVal !== null && refVal !== undefined && typeof refVal === "object") {
+  if (refVal !== null && typeof refVal === "object") {
     activeHost.setRef(refVal, el)
   }
   v._el = el
@@ -286,7 +286,7 @@ fn patchVnodeEl(el, ov, nv) {
   if (!el || !ov) {
     return false
   }
-  if (nv === null || nv === undefined) {
+  if (nv === null) {
     return false
   }
   if (typeof nv === "string" || typeof nv === "number") {
@@ -313,7 +313,7 @@ fn patchVnodeEl(el, ov, nv) {
     activeHost.patchProp(el, nv.tag, k, p[k], op[k])
     ki = ki + 1
   }
-  if (!("style" in p) && op.style !== undefined && op.style !== null) {
+  if (!("style" in p) && op.style !== null) {
     activeHost.styleRemoved(el)
   }
   let ocx = flattenChildren(ov.children, Fragment)
@@ -456,7 +456,7 @@ export fn h(tag, props, children) {
   let i = 0
   let k = null
   let result = null
-  if (children === undefined || children === null) {
+  if (children === null) {
     children = []
   }
   if (!Array.isArray(children)) {
@@ -476,7 +476,7 @@ export fn h(tag, props, children) {
       p.children = children
     }
     // key prop is consumed by the scope manager; not forwarded to the component.
-    enterChildScope(tag, (("key" in raw) && raw["key"] !== null && raw["key"] !== undefined) ? raw["key"] : null)
+    enterChildScope(tag, (("key" in raw) && raw["key"] !== null) ? raw["key"] : null)
     result = null
     try { result = tag(p) }
     finally { exitChildScope() }
@@ -975,7 +975,7 @@ export fn memo(viewFn, areEqual) {
 export fn signal(initial) {
   let value = initial
   fn s(next) {
-    if (next === undefined) {
+    if (next === null) {
       return value
     }
     if (typeof next === "function") {

@@ -19,7 +19,7 @@ fn omitKey(obj, key) {
 
 fn propsForH(props, key) {
   let p = props ? props : {}
-  if (key === undefined || key === null) {
+  if (key === null) {
     return p
   }
   let out = omitKey(p, "key")
@@ -33,7 +33,7 @@ fn childrenFromProps(props) {
   }
   let raw = props.children
   let rest = omitKey(props, "children")
-  if (raw === undefined || raw === null) {
+  if (raw === null) {
     return { props: rest, children: [] }
   }
   if (Array.isArray(raw)) {
