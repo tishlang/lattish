@@ -5,7 +5,7 @@ export fn flattenInto(out, c, fragmentTag) {
   // Do not use `if (c == null) { return }` here — `tish build --target js` lowers it to an empty if + unconditional return.
   // Skip `undefined` too: sparse arrays / `.map` without a return otherwise land in flattened children and
   // `patchVnodeEl` can throw when comparing tags.
-  if ((c !== null) && (c !== undefined) && (typeof c !== "boolean")) {
+  if ((c !== null) && (typeof c !== "undefined") && (typeof c !== "boolean")) {
     if (Array.isArray(c)) {
       let i = 0
       while (i < c.length) {
@@ -96,14 +96,14 @@ export fn applyStyleObject(el, styleObj) {
   while (ki < keys.length) {
     let key = keys[ki]
     let raw = styleObj[key]
-    if (raw === null || raw === undefined || raw === false) {
+    if (raw === null || typeof raw === "undefined" || raw === false) {
       ki = ki + 1
       continue
     }
     let val = String(raw)
     nextKeys.push(key)
     nextVals[key] = val
-    let prevVal = prevVals !== null && prevVals !== undefined ? prevVals[key] : undefined
+    let prevVal = prevVals !== null && typeof prevVals !== "undefined" ? prevVals[key] : null
     if (prevVal !== val) {
       writeStyleKey(el, key, val)
     }
