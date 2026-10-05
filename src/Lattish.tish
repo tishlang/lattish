@@ -229,7 +229,8 @@ let DomHost = {
   mountProp: applyMountedProp,
   patchProp: domPatchProp,
   styleRemoved: clearLattishStyleKeys,
-  setRef: (refObj, value) => { refObj.current = value }
+  setRef: (refObj, value) => { refObj.current = value },
+  profiler: () => (typeof window !== "undefined") ? window : null
 }
 
 let activeHost = DomHost
@@ -574,14 +575,21 @@ let rootScope = makeScope()
 let currentScope = rootScope
 let scopeStack = []
 
-// Stable per-function id (functions are objects; we stash the id once so
-// we can use string keys in scope.children without WeakMap).
+// Stable per-function id, so scope.children can use string keys. Tish functions don't
+// accept property writes and Map has no function keys, so ids live in an identity table
+// (one entry per component type, so a linear scan stays small).
 let nextFnId = 0
+let fnIds = []
 fn fnIdString(f) {
-  if ("_lattishFnId" in f) { return f._lattishFnId }
+  let i = 0
+  while (i < fnIds.length) {
+    if (fnIds[i].f === f) { return fnIds[i].id }
+    i = i + 1
+  }
   nextFnId = nextFnId + 1
-  f._lattishFnId = "f" + String(nextFnId)
-  return f._lattishFnId
+  let id = "f" + String(nextFnId)
+  fnIds.push({ f: f, id: id })
+  return id
 }
 
 // JS-target codegen wraps property access with `?? null`, so reading a
@@ -679,10 +687,20 @@ fn runEffectsTree(scope) {
   }
 }
 
+// A host config may provide `schedule(cb)` to run deferred flushes on its own loop
+// (an AppKit run loop, a plugin VM thread); the DOM host uses a microtask.
+fn scheduleDeferred(cb) {
+  if (activeHost.schedule) {
+    activeHost.schedule(cb)
+  } else {
+    queueMicrotask(cb)
+  }
+}
+
 fn scheduleEffectsFlush() {
   if (effectsMicrotaskScheduled) { return }
   effectsMicrotaskScheduled = true
-  queueMicrotask(() => {
+  scheduleDeferred(() => {
     effectsMicrotaskScheduled = false
     let ri = 0
     while (ri < rootList.length) {
@@ -776,7 +794,7 @@ fn flushOneRootEntry(entry) {
   /* Phase-resolved profiling so the perf HUD can break down a slow
      flush into "rootComponent ran" vs "DOM patch happened". Stored on
      window so probes can read without a runtime export. */
-  let profile = (typeof window !== "undefined") ? window : null
+  let profile = activeHost.profiler ? activeHost.profiler() : null
   let t0 = (profile && profile.performance && profile.performance.now) ? profile.performance.now() : 0
   if (profile) profile.__lattishRendering = true
 
@@ -821,7 +839,7 @@ fn scheduleFlush() {
     return
   }
   flushScheduled = true
-  queueMicrotask(() => {
+  scheduleDeferred(() => {
     flushScheduled = false
     flushRender()
   })
@@ -851,8 +869,9 @@ export fn useState(init) {
        to attribute setState calls to a stack frame so we can see who is
        calling setState during render (which would cause an infinite flush
        loop). Opt-in for zero cost when nothing is reading. */
-    if (typeof window !== "undefined" && window.__lattishSetStateProbe) {
-      try { window.__lattishSetStateProbe(i) } catch (eP) {}
+    let probe = activeHost.profiler ? activeHost.profiler() : null
+    if (probe && probe.__lattishSetStateProbe) {
+      try { probe.__lattishSetStateProbe(i) } catch (eP) {}
     }
     scheduleFlush()
   }
