@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "type": "module",
   "description": "Lattish runtime — hooks + DOM for Tish JSX",
-  "license": "PIF",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/tishlang/lattish.git"
